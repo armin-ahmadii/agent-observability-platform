@@ -1,0 +1,16 @@
+/* Tasks: your recent requests and where each went, drawn like the Agents tree. */
+.req-list { margin-top: 4px; }
+.req { padding: 6px 0; }
+.req-list > .fold + .fold > .req { border-top: 1px solid var(--line); }
+.req-q { display: flex; align-items: center; gap: 10px; height: 28px; min-width: 0; }
+.req-q .q { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.req-st { flex: none; white-space: nowrap; }
+.req-st.working { color: var(--working); }
+.req-st.queued, .req-st.done { color: var(--fg2); }
+.req-a { display: flex; align-items: center; gap: 8px; width: calc(100% + 8px); height: 28px; min-width: 0; margin-left: -8px; padding: 0 8px; border-radius: 6px; color: var(--fg); text-align: left; }
+button.req-a:hover { background: var(--hover); }
+button.req-a:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.req-a .mdl { flex: none; color: var(--fg2); white-space: nowrap; }
+.req-a .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.req-a .t .desc { color: var(--fg2); font-weight: 400; }
+@media (max-width: 380px) { .req-a .mdl { display: none; } }

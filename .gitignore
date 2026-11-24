@@ -1,0 +1,18 @@
+# Runtime data the mod and the server write into live/ (personal; never commit)
+live/sessions/
+live/memory/
+live/*.json
+!live/icons.json
+live/*.json.tmp
+live/inbox.jsonl
+live/inbox.*.claimed
+live/server.log
+
+# Build output (npm run build in web/ writes it)
+live/index.html
+web/dist/
+
+# Dependencies
+node_modules/
+
+.DS_Store

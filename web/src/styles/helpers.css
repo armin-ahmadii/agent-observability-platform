@@ -1,0 +1,12 @@
+/* Saved helpers and the on/off switch (.tog, also used by the settings menu). */
+.hlp { display: flex; align-items: center; gap: 10px; height: 40px; border-bottom: 1px solid var(--line); }
+.hlp .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hlp .tags { flex: 1; min-width: 0; color: var(--fg2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tog { width: 28px; height: 16px; border-radius: 8px; background: var(--line-strong); position: relative; flex: none; transition: background 0.15s var(--ease-fast); }
+.tog::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s var(--ease-fast);
+}
+.tog[aria-checked="true"] { background: var(--fg); }
+.tog[aria-checked="true"]::after { transform: translateX(12px); background: var(--bg); }
+.tog:focus-visible { border-radius: 8px; outline-offset: 2px; }

@@ -1,0 +1,100 @@
+/* Agent rows: tree lines, logo, model name, title, markers, progress ring, row action (Save as helper / Resolve); Earlier agents. */
+.rows { margin: 4px -8px 0; }
+.row { position: relative; display: flex; align-items: center; height: 36px; padding: 0 8px; border-radius: 6px; cursor: pointer; }
+.row:hover, .row.sel { background: var(--hover); }
+.row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; border-radius: 6px; }
+.lead { position: relative; display: flex; align-items: center; align-self: stretch; flex: none; }
+/* Tree: the line runs down from the parent's logo; each level steps in by one logo width. */
+.g { width: 22px; align-self: stretch; position: relative; }
+.g::before { content: ''; position: absolute; left: 8.5px; top: 0; bottom: 0; width: 1px; background: var(--line-strong); }
+.row.parent.open .lead::after { content: ''; position: absolute; left: calc(var(--d, 0) * 22px + 8.5px); top: 27px; bottom: 0; width: 1px; background: var(--line-strong); }
+/* A parent's logo turns into the fold chevron on hover. */
+.lg { position: relative; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; flex: none; }
+.lg .logo, .lg .cv { grid-area: 1 / 1; transition: opacity 0.15s var(--ease-fast), transform 0.15s var(--ease-fast); }
+.lg .cv { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; color: var(--fg); opacity: 0; transform: scale(0.8); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--bg); }
+.row:hover .lg .logo, .lg:focus-visible .logo { opacity: 0; transform: scale(0.8); }
+.row:hover .lg .cv, .lg:focus-visible .cv { opacity: 1; transform: none; }
+.lg::before { content: ''; position: absolute; inset: -5px; }
+.lg:hover .cv { background: linear-gradient(var(--hover), var(--hover)), var(--bg); }
+.lg .cv svg { width: 14px; height: 14px; transition: transform 0.15s var(--ease-fast); }
+.row.open .lg .cv svg { transform: rotate(90deg); }
+.logo { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 4px; color: #fff; background: var(--c); }
+.logo svg { width: 12px; height: 12px; }
+.logo.light { color: #0d0d0d; background: #fff; box-shadow: inset 0 0 0 1px var(--line-strong); }
+@media (prefers-color-scheme: dark) { .logo.light { color: var(--bg); background: var(--fg); box-shadow: none; } }
+.logo.folder svg { width: 14px; height: 14px; }
+.logo.none { color: var(--fg3); background: none; box-shadow: inset 0 0 0 1px var(--line-strong); }
+/* Small bits beside the title are all-or-nothing: shown whole, or hidden when the row is tight (container queries below). */
+.mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding-left: 10px; container-type: inline-size; }
+.mid .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 0; }
+.row.done .mid .name { font-weight: 400; }
+.name .desc { color: var(--fg2); font-weight: 400; }
+/* Finished subagents step back so the ones still working stand out. */
+.row.done.sub { opacity: 0.5; }
+.row.done.sub:hover, .row.done.sub.sel, .row.done.sub:focus-visible { opacity: 0.85; }
+/* Earlier agents: when it started. */
+.mid .kids { color: var(--fg2); font-size: 12px; white-space: nowrap; flex: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Model short name right after the logo, before the title: grey, one line, always whole. The title gives way first. */
+.mid .mdl { flex: none; color: var(--fg2); font-weight: 400; white-space: nowrap; }
+/* Subagent count beside a parent's name, e.g. "(3)". */
+.mid .cnt { flex: none; margin-left: -6px; color: var(--fg2); font-weight: 400; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+/* Status markers beside the name */
+.mk { flex: none; width: 14px; height: 14px; margin-left: -4px; border-radius: 3px; }
+.mk svg { width: 14px; height: 14px; }
+.mk.alert { color: var(--alert); }
+.mk.warn, .mk.great { color: var(--working); }
+/* The row action (Save as helper, or Resolve): shows over the Tokens/Cost columns on hover or focus. */
+.act {
+  display: flex; opacity: 0; pointer-events: none; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 6px; flex: none;
+  position: absolute; right: 36px; top: 6px; z-index: 1;
+  border-radius: 5px; font-size: 12px; color: var(--fg2); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--bg);
+}
+.act:hover { color: var(--fg); }
+.act[disabled] { cursor: default; }
+.row:hover .act, .row:focus-visible .act, .act:focus-visible, .act.keep { opacity: 1; pointer-events: auto; }
+.row:is(:hover, :focus-visible, :has(.act:focus-visible)):has(.act:not(.keep)) :is(.c-tok, .c-usd) { visibility: hidden; }
+/* An agent that did really well keeps its save button in view, in the row's own flow. */
+.act.keep { position: static; margin-left: auto; }
+.act.res { padding: 0 8px; }
+.row .num { color: var(--fg2); flex: none; }
+.row .c-usd { color: var(--fg); }
+.row.triage { margin-top: 4px; }
+.row.triage .name { font-weight: 400; color: var(--fg2); }
+.row.triage .c-usd { color: var(--fg2); }
+
+/* Earlier agents */
+.hist-h { display: flex; align-items: center; gap: 6px; height: 32px; margin: 8px 0 0 -4px; padding: 0 6px 0 2px; border-radius: 6px; color: var(--fg2); font-size: 12px; }
+.hist-h:hover { color: var(--fg); background: var(--hover); }
+.hist-h em { font-style: normal; color: var(--fg2); }
+.hist-h .cv { width: 16px; height: 16px; display: grid; place-items: center; }
+.hist-h .cv svg { width: 14px; height: 14px; transition: transform 0.15s var(--ease-fast); }
+.hist-h[aria-expanded="true"] .cv svg { transform: rotate(90deg); }
+.row.past { opacity: 0.55; }
+.row.past:hover, .row.past:focus-visible, .row.past.sel { opacity: 0.8; }
+.row.past .name { font-weight: 400; }
+@container (max-width: 240px) { .mid .kids { display: none; } }
+/* In rows the model name is a fixed-width column (sized to the common short names: "Haiku 5.5", "Codex 5.1", "Ember 1.0"), so every title starts at the same x. Longer names are cut (the opened agent shows the full name). */
+.mid .mdl.col { width: var(--mdl-w); flex: none; overflow: hidden; text-overflow: ellipsis; }
+/* "2/5": how far through its own to-do list the agent is. Drops out before the title or the model name gives way. */
+.mid .prog { flex: none; margin-left: -4px; color: var(--fg2); font-weight: 400; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+@container (max-width: 280px) { .mid .prog { display: none; } }
+
+/* Right after the title: the progress ring and "x/y". Never shrinks; the title is cut first. */
+.mid .rx { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: -2px; color: var(--fg2); }
+.rx .pr { width: 13px; height: 13px; flex: none; transform: rotate(-90deg); }
+.rx .pr circle { fill: none; stroke-width: 2.5; }
+.rx .pr .bg { stroke: var(--line-strong); }
+.rx .pr .fg { stroke: var(--working); stroke-linecap: round; transition: stroke-dasharray 0.3s var(--ease-fast); }
+.rx.finished .pr .fg { stroke: var(--task-ok); }
+.rx.attn .pr .bg { stroke: var(--alert); opacity: 0.35; }
+.rx.attn .pr .fg { stroke: var(--alert); }
+.rx.queued .pr .bg { stroke: var(--fg3); stroke-dasharray: 2.5 2.5; }
+.rx.spin .pr { animation: ring-spin 1.6s linear infinite; }
+@keyframes ring-spin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+.rx .xy { font-size: 12px; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; white-space: nowrap; }
+/* Hover or keyboard focus: the agent's note replaces the title in place, with a quick fade. */
+.name .nt-h { display: none; color: var(--fg2); font-weight: 400; }
+.row:is(:hover, :focus-visible) .name.has-note .ttl { display: none; }
+.row:is(:hover, :focus-visible) .name.has-note .nt-h { display: inline; animation: fade-in 0.15s var(--ease-fast); }
+@media (prefers-reduced-motion: reduce) { .rx.spin .pr { animation: none; } .rx .pr .fg { transition: none; } .name .nt-h { animation: none !important; } }
+

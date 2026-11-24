@@ -1,0 +1,68 @@
+/* Opened agent (breakdown): heading, checklist, brief, result, meta, lanes timeline. */
+.detail { display: grid; grid-template-columns: auto minmax(0, 1fr); padding: 0 8px; }
+.d-lead { grid-row: 1 / span 4; display: flex; }
+.d-lead .pad { flex: none; }
+.d-text { padding-top: 10px; max-width: 680px; }
+.d-text h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; }
+.brief {
+  margin: 4px 0 0; color: var(--fg2); overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
+}
+.brief.all { display: block; white-space: pre-wrap; }
+.brief.res { margin-top: 8px; color: var(--fg); white-space: pre-line; }
+.brief.res.all { white-space: pre-line; }
+.brief b { font-weight: 500; }
+.brief code { font-family: var(--mono); font-size: 12px; }
+.more { margin-top: 2px; font-size: 12px; color: var(--fg2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.more:hover { color: var(--fg); }
+.more[hidden] { display: none; }
+.d-meta { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 2px; margin-top: 8px; font-size: 12px; color: var(--fg2); font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+.d-meta span { white-space: nowrap; }
+.d-meta .d-info { min-width: 0; white-space: normal; }
+.d-meta .d-act { display: inline-flex; align-items: center; gap: 8px; }
+.d-meta .d-act .thumbs { margin-left: 0; }
+.d-meta .m-tok { display: none; }
+.d-time {
+  display: grid; grid-template-columns: 112px minmax(0, 1fr) minmax(52px, max-content) minmax(44px, max-content); column-gap: 12px;
+  align-items: center; margin-top: 12px; max-width: 880px;
+}
+.d-time:empty { margin-top: 0; }
+.lane { display: contents; }
+.lane > * { height: 28px; display: flex; align-items: center; }
+.lane .who { gap: 8px; max-width: 132px; min-width: 0; }
+.lane .who svg { flex: none; color: var(--c); }
+.lane .who b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane .track { position: relative; min-width: 0; }
+.lane .track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 12px; margin-top: -6px; border-radius: 3px; background: var(--hover); }
+.lane .track i { position: absolute; top: 50%; height: 12px; margin-top: -6px; min-width: 3px; border-radius: 3px; background: var(--c); }
+.lane .track i::before { content: ''; position: absolute; inset: -8px -4px; }
+.lane .track i:hover { height: 16px; margin-top: -8px; }
+.lane .track i:hover::before { inset: -6px -4px; }
+.lane .num { justify-content: flex-end; color: var(--fg2); }
+.lane .l-tok { color: var(--fg2); }
+.detail > :last-child { padding-bottom: 18px; }
+/* The agent's checklist (the prompt sits behind "Show prompt"). */
+.tasks { list-style: none; margin: 6px 0 2px; padding: 0; }
+.tk { display: flex; align-items: flex-start; gap: 8px; padding: 2px 0; line-height: 20px; }
+.tk-m { flex: none; width: 16px; height: 20px; display: grid; place-items: center; }
+.tk-m svg { width: 16px; height: 16px; }
+.tk-t { min-width: 0; overflow-wrap: anywhere; }
+.tk-n { flex: none; margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--fg2); font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+.tk.done .tk-m { color: var(--task-ok); }
+.tk.failed .tk-m { color: var(--task-fail); }
+.tk.failed .tk-t { color: var(--fg2); }
+.tk.done .tk-t { color: var(--fg2); }
+.tk.in_progress .tk-m { color: var(--working); }
+.tk.in_progress .tk-t { color: var(--fg); }
+/* Not started, and planned steps: the same circle, empty. */
+.tk.pending .tk-m svg path, .tk.planned .tk-m svg path { display: none; }
+.tk.pending .tk-m { color: var(--fg2); }
+.tk.pending .tk-t { color: var(--fg2); }
+.tk.planned .tk-m { color: var(--fg3); }
+.tk.planned .tk-t { color: var(--fg2); }
+.tk.planned .tk-m svg circle { stroke-dasharray: 2.5 2.5; }
+.tasks + .more { display: block; }
+
+/* All sessions: an orchestrator's Earlier agents, at the end of its breakdown. */
+.d-after { grid-column: 2; padding-bottom: 6px; }
+.d-after .hist-h { margin-top: 4px; }

@@ -1,0 +1,19 @@
+/* MCP servers list and app icons. */
+.srv { display: flex; align-items: center; height: 36px; border-bottom: 1px solid var(--line); }
+#servers > .fold:last-child > .srv { border-bottom: 0; }
+.appic { width: 16px; height: 16px; border-radius: 4px; flex: none; display: block; }
+.appic.edge { box-shadow: 0 0 0 1px var(--line-strong); }
+.logo.app { background: none; box-shadow: none; overflow: hidden; }
+.logo.app .appic { width: 18px; height: 18px; }
+.srv .who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.srv .who svg { color: var(--fg2); }
+.srv .who b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv .share { width: var(--share-w); margin: 0 16px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.srv .share i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+.srv .who .logo { width: 16px; height: 16px; }
+.srv .who .logo svg { width: 11px; height: 11px; color: #fff; }
+/* Servers not used in the last half hour: greyed, with when they were last used. */
+.srv.past { opacity: 0.55; cursor: default; }
+.srv.past:hover { opacity: 0.8; }
+.srv .when { margin-left: 8px; color: var(--fg2); font-size: 12px; white-space: nowrap; flex: none; }
+.srv .share:empty { visibility: hidden; }

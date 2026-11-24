@@ -1,0 +1,51 @@
+/* Project memory: agents ranked by how you reacted to their work, and the rules learned. Also the thumbs buttons. */
+.c-score { width: 72px; text-align: right; }
+.mem { display: flex; align-items: center; gap: 10px; height: 36px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 0; }
+#mem-agents > .fold:last-child > .mem { border-bottom: 0; }
+.mem .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem .kind { flex: 0 6 auto; min-width: 0; color: var(--fg2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mem .quote { flex: 1; min-width: 0; color: var(--fg2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem .score { width: 72px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 2px; font-variant-numeric: tabular-nums; }
+.thumbs { display: inline-flex; gap: 2px; margin-left: 8px; vertical-align: middle; }
+.thumb { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; color: var(--fg2); }
+.thumb svg { width: 14px; height: 14px; }
+.thumb:hover { background: var(--hover); color: var(--fg); }
+.thumb.on { color: var(--live); background: color-mix(in srgb, var(--live) 12%, transparent); }
+.thumb.on.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.mem:hover, .mem.sel { background: var(--hover); }
+.mem:focus-visible { outline: 2px solid var(--fg3); outline-offset: -2px; }
+#sec-mem .head .c-dchev { margin-left: 10px; }
+.mem .c-dchev { flex: none; }
+.mem.sel .dchev svg { transform: rotate(180deg); }
+.mem:hover .dchev, .mem.sel .dchev { color: var(--fg); }
+.mem-det { padding: 4px 0 12px 28px; border-bottom: 1px solid var(--line); font-size: 12px; }
+#mem-agents > .fold:last-child > .mem-det { border-bottom: 0; }
+.mem-det .brief { margin: 4px 0 6px; -webkit-line-clamp: 2; line-clamp: 2; font-size: 13px; color: var(--fg); }
+.mem-det .reaction { padding: 5px 0; }
+.mem-det .reaction + .reaction { border-top: 1px solid var(--line); }
+.mem-det .rl { display: flex; gap: 8px; align-items: baseline; }
+.mem-det .rq { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-size: 13px; }
+.mem-det .rs { flex: none; font-variant-numeric: tabular-nums; }
+.mem-det .rs.up, .lessons .rs.up { color: var(--live); }
+.mem-det .rs.down, .lessons .rs.down { color: var(--bad); }
+.mem-det .rt { flex: none; color: var(--fg2); white-space: nowrap; }
+.mem-det .rr { margin-top: 2px; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem-more[hidden] { display: none; }
+.mem .score span { display: inline-flex; align-items: center; gap: 2px; }
+.mem .score svg { width: 14px; height: 14px; }
+.mem.unrated { opacity: 0.55; }
+.mem .score.up { color: var(--live); }
+.mem .score.down { color: var(--bad); }
+.mem .score.even { color: var(--fg2); }
+.mem-h { margin-top: 16px; color: var(--fg2); font-size: 12px; }
+.lessons { list-style: none; margin: 6px 0 0; padding: 0; }
+.lessons li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lessons li:last-child { border-bottom: 0; }
+.lessons.rest { margin-top: 0; border-top: 1px solid var(--line); }
+.lessons li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lessons li em { font-style: normal; color: var(--fg2); font-size: 12px; white-space: nowrap; }
+.lessons .src { flex: 0 1 auto; max-width: 42%; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.lessons .src .logo { width: 16px; height: 16px; }
+.lessons .src .logo svg { width: 11px; height: 11px; }
+.lessons .src b { font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lessons .rs { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; }

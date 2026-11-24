@@ -1,0 +1,15 @@
+/* The one tooltip (components/Tooltip.tsx). The cost card's own styles are in stats.css. */
+#tip {
+  position: fixed; z-index: 30; pointer-events: none; padding: 5px 8px; border-radius: 6px; font-size: 12px; line-height: 16px;
+  background: var(--tip-bg); color: var(--tip-fg); box-shadow: 0 0 0 1px var(--tip-line), 0 4px 12px rgba(0, 0, 0, 0.16);
+  max-width: min(320px, calc(100vw - 16px)); display: flex; gap: 8px; align-items: center;
+  font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';
+}
+/* Fades in (and out a little faster). Right after another tooltip it shows at once: [data-instant]. It never slides: it follows the mouse. */
+#tip { transition: opacity 0.12s var(--ease-fast), visibility 0s; }
+#tip[hidden] { display: flex; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.09s var(--ease-fast), visibility 0s 0.09s; }
+#tip[data-instant] { transition: none; }
+#tip span { color: var(--tip-fg2); white-space: nowrap; }
+#tip:not(.card) span { white-space: normal; }
+#tip:not(.card) { flex-wrap: wrap; max-height: 40vh; overflow: hidden; }
+#tip.long { flex-direction: column; align-items: flex-start; gap: 2px; }

@@ -1,0 +1,23 @@
+/* Section heads and column widths shared by Agents, MCP servers and Project memory. */
+.sec { margin-top: 36px; }
+.head {
+  display: flex; align-items: center; height: 32px; border-bottom: 1px solid var(--line);
+  color: var(--fg2); font-size: 12px;
+}
+.head h2 { margin: 0; flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head h2 em { font-style: normal; font-weight: 400; color: var(--fg2); margin-left: 6px; }
+.head span { text-align: right; }
+.empty { color: var(--fg2); padding: 10px 0; }
+.empty[hidden] { display: none; }
+#blank { margin-top: 20px; }
+
+.c-calls { width: 72px; text-align: right; }
+.c-pct { width: 40px; text-align: right; white-space: nowrap; }
+.head .c-share { width: calc(var(--share-w) + 56px); margin-left: 16px; text-align: left; white-space: nowrap; }
+.c-tok { width: 80px; text-align: right; }
+.c-usd { width: 72px; text-align: right; }
+.c-dchev { width: 20px; flex-shrink: 0; }
+.dchev { width: 20px; height: 20px; display: grid; place-items: center; color: var(--fg3); }
+.dchev svg { transition: transform 0.15s var(--ease-fast); }
+.row.sel .dchev svg { transform: rotate(180deg); }
+.row:hover .dchev, .row.sel .dchev { color: var(--fg); }

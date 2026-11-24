@@ -1,0 +1,13 @@
+/* Skeleton while a session loads. */
+.sk { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--hover) 0%, var(--line-strong) 50%, var(--hover) 100%); background-size: 200% 100%; animation: sk 1.3s ease-in-out infinite; }
+.sk.sm { height: 8px; } .sk.lg { height: 22px; margin-top: 12px; }
+.sk.sq { width: 18px; height: 18px; flex: none; } .sk.sq.sm { width: 16px; height: 16px; }
+.sk.w6 { width: 6%; } .sk.w8 { width: 8%; } .sk.w15 { width: 15%; } .sk.w20 { width: 20%; } .sk.w25 { width: 25%; }
+.sk.w30 { width: 30%; } .sk.w35 { width: 35%; } .sk.w40 { width: 40%; } .sk.w45 { width: 45%; }
+.sk-stats { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.sk-stats > div { padding: 14px 16px 16px; } .sk-stats > div + div { border-left: 1px solid var(--line); }
+.sk-head { margin-top: 32px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.sk-row { display: flex; align-items: center; gap: 12px; height: 36px; }
+.sk-sp { flex: 1; }
+@keyframes sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

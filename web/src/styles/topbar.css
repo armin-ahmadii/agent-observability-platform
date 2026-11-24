@@ -1,0 +1,61 @@
+/* Top bar: back button, session switcher, session menu, weekly ring. */
+.top { display: flex; align-items: center; height: 36px; position: relative; margin-left: -8px; gap: 12px; }
+.wk { margin-left: auto; flex: none; display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; cursor: default; }
+.ring { width: 16px; height: 16px; flex: none; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 2.5; }
+.ring .bg { stroke: var(--line-strong); }
+.ring .fg { stroke: var(--fg2); stroke-linecap: round; }
+.ring .fg.hot { stroke: var(--working); }
+.wk:empty { display: none; }
+.wk .t { white-space: nowrap; color: var(--fg2); }
+.wk .t b { font-weight: 500; color: var(--fg); }
+.switch {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 8px;
+  border-radius: 6px; max-width: 100%; min-width: 0;
+}
+.switch:hover, .switch[aria-expanded="true"] { background: var(--hover); }
+.switch .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switch .num { color: var(--fg2); font-family: var(--sans); }
+.switch .grab { color: var(--fg3); margin-left: -2px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.live { background: var(--fg3); }
+.dot.working { background: var(--live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--live) 25%, transparent); animation: pulse 2s ease-in-out infinite; }
+.menu .st-l { color: var(--fg2); font-size: 12px; white-space: nowrap; }
+.dot.idle { box-shadow: inset 0 0 0 1.5px var(--fg3); }
+.menu {
+  position: absolute; top: 38px; left: 0; z-index: 20; min-width: 300px; max-width: min(440px, calc(100vw - 32px));
+  padding: 4px; border-radius: 8px; background: var(--panel); box-shadow: var(--menu-shadow);
+  transform-origin: top left; /* grows out of the switcher button */
+}
+.menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border-radius: 5px; text-align: left;
+}
+.menu button:hover { background: var(--hover); }
+.menu .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .num { color: var(--fg2); min-width: 92px; text-align: right; font-size: 12px; }
+.menu .tick { width: 16px; color: var(--fg); }
+.menu .mrow { position: relative; }
+.menu .mrow:hover > [role="menuitem"] { background: var(--hover); }
+/* Hide button: sits over the week share (same spot, so the row never changes width). */
+.menu .mhide {
+  position: absolute; top: 4px; right: 32px; width: 24px; height: 24px; padding: 0; justify-content: center;
+  border-radius: 4px; color: var(--fg2); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+}
+.menu .mhide:hover { background: var(--line); color: var(--fg); }
+.menu .mrow:hover .mhide, .menu .mrow:focus-within .mhide { opacity: 1; pointer-events: auto; }
+.menu .mrow:has(.mhide):hover .num, .menu .mrow:has(.mhide):focus-within .num { visibility: hidden; }
+.lims { padding: 8px 8px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.lim-t { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.lim-t span { flex: 1; color: var(--fg2); }
+.lim-t b { font-weight: 500; }
+.lim-t em { font-style: normal; color: var(--fg2); }
+.lim-bar { margin-top: 5px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.lim-bar i { display: block; height: 100%; background: var(--fg2); border-radius: 2px; }
+.lim-bar i.hot { background: var(--working); }
+@keyframes pulse { 50% { opacity: 0.45; } }
+/* Back to the parent session (inside a helper's own session). */
+.back { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 8px 0 4px; border-radius: 6px; color: var(--fg2); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 40%; }
+.back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.back:hover { color: var(--fg); background: var(--hover); }
+.back svg { width: 16px; height: 16px; transform: rotate(180deg); }
+.back[hidden] { display: none; }

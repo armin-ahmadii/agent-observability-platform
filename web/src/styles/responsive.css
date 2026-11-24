@@ -1,0 +1,42 @@
+/* Narrow-width rules (820/600/480/420/380) and reduced motion. Imported last so they win. */
+@media (max-width: 820px) {
+  .page { padding: 12px 16px 56px; }
+  :root { --share-w: 96px; }
+  .c-tok { width: 68px; }
+  .c-usd { width: 64px; }
+}
+@media (max-width: 600px) {
+  .stat { padding: 10px 12px 12px; }
+  .stat .v { font-size: 20px; line-height: 28px; }
+  .stat .v small { display: block; margin: 0; font-size: 12px; line-height: 16px; }
+  .menu .st-l { display: none; }
+  .srv .share { display: none; }
+  .head .c-share { width: 40px; margin-left: 0; display: flex; justify-content: flex-end; }
+  .c-calls { width: 56px; }
+  .act.keep span { display: none; }
+  .act.keep { padding: 0 5px; }
+}
+@media (max-width: 480px) {
+  #sw-usd { display: none; }
+  /* Narrow: the name gets the room. Tokens move into the opened row's details; secondary words drop. */
+  #agents .c-tok, #hist .c-tok, #chats .c-tok, .sec:has(#agents) > .head .c-tok, #sec-chats > .head .c-tok { display: none; }
+  .d-meta .m-tok { display: inline; }
+  .act span { display: none; }
+  .act { padding: 0 5px; }
+  .wk .wk-x, .menu .ofw { display: none; }
+  .menu .num { min-width: 48px; }
+  .back span { display: none; }
+}
+@media (max-width: 420px) {
+  .d-time { grid-template-columns: 112px minmax(0, 1fr) minmax(52px, max-content); }
+  .lane .l-tok { display: none; }
+}
+@media (max-width: 380px) {
+  /* The logo's tooltip still names the model. */
+  .mid .mdl { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg .cv svg, .lg .logo, .lg .cv, .tog, .tog::after, .dchev svg, .hist-h .cv svg { transition: none; }
+  /* Reduced motion: fades only, nothing moves. (Height and scale are switched off in components/motion.tsx.) */
+  #body.intro > * { animation-name: fade-in; animation-delay: 0s; }
+}

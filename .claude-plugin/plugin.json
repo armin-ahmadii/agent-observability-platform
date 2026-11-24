@@ -1,0 +1,10 @@
+{
+  "name": "subagent-deck",
+  "version": "0.1.0",
+  "description": "A panel that traces each subagent, shows its tools and cost, and saves good ones as reusable helpers.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Caleb Wu"
+  },
+  "license": "MIT"
+}

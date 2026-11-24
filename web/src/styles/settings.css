@@ -1,0 +1,8 @@
+/* Show/hide sections: the settings button and its menu. Same look as the session menu. */
+.setb { margin-left: auto; width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 6px; color: var(--fg2); }
+.setb:hover, .setb[aria-expanded="true"] { color: var(--fg); background: var(--hover); }
+.setb ~ .wk { margin-left: 0; }
+.smenu { left: auto; right: 0; min-width: 220px; transform-origin: top right; }
+.smenu button { gap: 12px; }
+.smenu [aria-checked="true"] .tog { background: var(--fg); }
+.smenu [aria-checked="true"] .tog::after { transform: translateX(12px); background: var(--bg); }
