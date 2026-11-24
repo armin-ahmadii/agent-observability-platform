@@ -48,11 +48,27 @@ export function setup(on: On, opts: Options = {}) {
 
   mock.env(on, opts.env ?? {})
   const files: Record<string, string> = {}
+  /** How often each path was read and written. */
+  const reads: Record<string, number> = {}
+  const writes: Record<string, number> = {}
   on('fs.exists', (_, e) => ({ value: (e as { path: string }).path in files }) as never)
-  on('fs.read', (_, e) => ({ value: files[(e as { path: string }).path] ?? '' }) as never)
+  // mtimeMs stands in as a hash of the content, so a test that edits a file directly also "touches" it.
+  on('fs.stat', (_, e) => {
+    const text = files[(e as { path: string }).path]
+    if (text === undefined) return { deny: 'ENOENT' } as never
+    let hash = 0
+    for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0
+    return { value: { kind: 'file', size: text.length, mtimeMs: hash, isLink: false } } as never
+  })
+  on('fs.read', (_, e) => {
+    const path = (e as { path: string }).path
+    reads[path] = (reads[path] ?? 0) + 1
+    return { value: files[path] ?? '' } as never
+  })
   on('fs.write', (_, e) => {
     const w = e as { path: string; text?: string }
     files[w.path] = String(w.text ?? '')
+    writes[w.path] = (writes[w.path] ?? 0) + 1
     return { value: undefined } as never
   })
   // The three commands the inbox drain runs, over the in-memory files.
@@ -87,7 +103,7 @@ export function setup(on: On, opts: Options = {}) {
   /** The published snapshot of session s1. */
   const snapshot = <T = { runs: { id: string; type: string; now: string }[] }>() => JSON.parse(files[fileEnding('/sessions/s1.json')!]!) as T
 
-  return { files, clock, fileEnding, snapshot, ran }
+  return { files, clock, fileEnding, snapshot, ran, reads, writes }
 }
 
 /** A Haiku reply with a little usage. */

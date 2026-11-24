@@ -1,6 +1,6 @@
 // What an agent is doing, from the tools it calls, and its timeline of stretches.
 
-import type { Activity, Segment, ServerKind } from '../types'
+import type { Activity, Run, Segment, ServerKind } from '../types'
 import { VERB } from './icons'
 import { registry, serverOf } from './servers'
 import { type $, updateRuns } from './state'
@@ -39,12 +39,23 @@ export function activityOf(tool: string): Activity {
  * Record that run `id` is now doing `step`. Each MCP server (or built-in
  * activity) gets one stretch on the timeline; repeats extend it. Thinking
  * between actions gets a stretch of its own.
+ *
+ * Hooks on the hot path pass `at` (a time they already read) and `patch` (other
+ * fields to set in the same write). Returns false when there is no run `id`.
  */
-export async function mark($: $, id: string, step: Activity, tool?: string) {
-  const at = await $.clock.now()
-  const server = tool ? serverOf(tool) : undefined
-  await updateRuns($, list =>
-    list.map(run => {
+export async function mark(
+  $: $,
+  id: string,
+  step: Activity,
+  opts: { tool?: string; at?: number; patch?: (run: Run) => Partial<Run> } = {},
+): Promise<boolean> {
+  const at = opts.at ?? (await $.clock.now())
+  const server = opts.tool ? serverOf(opts.tool) : undefined
+  let found = false
+  await updateRuns($, list => {
+    if (!list.some(r => r.id === id)) return list
+    found = true
+    return list.map(run => {
       if (run.id !== id) return run
       const segments = [...run.segments]
       const last = segments[segments.length - 1]
@@ -60,11 +71,13 @@ export async function mark($: $, id: string, step: Activity, tool?: string) {
       }
       return {
         ...run,
+        ...opts.patch?.(run),
         segments: segments.slice(-MAX_SEGMENTS),
         now: step,
         nowServer: step === 'thinking' ? run.nowServer : server,
         mcp: server ? { ...run.mcp, [server]: (run.mcp[server] ?? 0) + 1 } : run.mcp,
       }
-    }),
-  )
+    })
+  })
+  return found
 }

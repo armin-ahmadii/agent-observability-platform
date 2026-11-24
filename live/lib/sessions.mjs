@@ -16,9 +16,22 @@ const WEEK_LIST_CACHE_MS = 10 * SECOND
 const STORE_KEEP_MS = 31 * DAY // matches the usage store
 const EMPTY_DAY = { usd: 0, tokens: 0, mainUsd: 0, mainTokens: 0 }
 
-const readSessionText = id => readFileSync(sessionPath(id), 'utf8')
+const LIST_CACHE_MS = 1 * SECOND // every open tab polls; one listing serves all of them for this long
+
+// Parsed session files, re-parsed only when the file changed (each open session rewrites its own every 2 s;
+// most files are idle). Entries are shared: callers must not change them.
+const parsed = new Map() // path -> { mtimeMs, size, data }
+function parseSessionFile(path, st = statSync(path)) {
+  const hit = parsed.get(path)
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.data
+  const data = JSON.parse(readFileSync(path, 'utf8'))
+  parsed.set(path, { mtimeMs: st.mtimeMs, size: st.size, data })
+  return data
+}
+
+// A session file's data, corrected for the dashboard (a fresh top-level copy; runs are shared).
 export function readSessionFile(id) {
-  try { return applyResolved(applyT3Finished(JSON.parse(readSessionText(id)))) } catch { return null }
+  try { return applyResolved(applyT3Finished({ ...parseSessionFile(sessionPath(id)) })) } catch { return null }
 }
 
 // Session files are deleted a week after their last write.
@@ -27,7 +40,7 @@ export function deleteOldSessionFiles() {
     for (const name of readdirSync(SESSIONS_DIR)) {
       if (!name.endsWith('.json')) continue
       const path = join(SESSIONS_DIR, name)
-      if (Date.now() - statSync(path).mtimeMs > KEEP_SESSION_FILES_MS) unlinkSync(path)
+      if (Date.now() - statSync(path).mtimeMs > KEEP_SESSION_FILES_MS) { unlinkSync(path); parsed.delete(path) }
     }
   } catch {}
 }
@@ -36,6 +49,7 @@ export function deleteOldSessionFiles() {
 let limits = []
 let limitsAt = 0
 export const rateLimits = () => limits
+export const rateLimitsAt = () => limitsAt || null
 function noteLimits(data, mtime) {
   if (Array.isArray(data.rateLimits) && data.rateLimits.length && mtime >= limitsAt) {
     limits = data.rateLimits
@@ -50,16 +64,20 @@ let hidden = {}
 try { hidden = JSON.parse(readFileSync(hiddenPath, 'utf8')) ?? {} } catch {}
 const saveHidden = () => { try { writeFileSync(hiddenPath, JSON.stringify(hidden, null, 1) + '\n') } catch {} }
 export const isHidden = id => id in hidden
+let hiddenChanges = 0
+export const hiddenVersion = () => hiddenChanges // changes whenever the hidden set does
 // Entries hidden over 31 days ago (beyond every timeframe) whose session file is gone.
 export function trimHidden() {
   let changed = false
   for (const [id, at] of Object.entries(hidden)) {
     if (Date.now() - at > STORE_KEEP_MS && !existsSync(sessionPath(id))) { delete hidden[id]; changed = true }
   }
-  if (changed) saveHidden()
+  if (changed) { saveHidden(); hiddenChanges++ }
 }
 export function setHidden(id, hide) {
   if (hide) hidden[id] = Date.now(); else delete hidden[id]
+  listCache.clear()
+  hiddenChanges++
   saveHidden()
 }
 function unhideIfActive(data) {
@@ -98,7 +116,15 @@ function sessionRow(data, st, day) {
 
 // Session files written within `maxAge`, newest-started first. Each row carries its share of this week's limit,
 // and a T3 helper's session is marked with the session that delegated it (parentId).
+const listCache = new Map() // maxAge -> { at, list }
 export function listSessions(maxAge = DAY) {
+  const hit = listCache.get(maxAge)
+  if (hit && Date.now() - hit.at < LIST_CACHE_MS) return hit.list
+  const list = readSessionList(maxAge)
+  listCache.set(maxAge, { at: Date.now(), list })
+  return list
+}
+function readSessionList(maxAge) {
   const out = []
   const day = usageWindow(DAY).bySession
   let names = []
@@ -109,7 +135,7 @@ export function listSessions(maxAge = DAY) {
     try {
       const st = statSync(path)
       if (Date.now() - st.mtimeMs > maxAge) continue
-      const data = JSON.parse(readFileSync(path, 'utf8'))
+      const data = parseSessionFile(path, st)
       noteLimits(data, st.mtimeMs)
       unhideIfActive(data)
       out.push(sessionRow(data, st, day))

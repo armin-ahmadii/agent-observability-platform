@@ -3,7 +3,7 @@
 // project memory.
 import { statSync } from 'node:fs'
 import { readTrace, sessionHistory } from './history.mjs'
-import { cleanText, contentText, readLines, stripNotebook, transcriptFiles } from './transcripts.mjs'
+import { cleanText, contentText, linesOf, mainTranscript, stripNotebook } from './transcripts.mjs'
 
 const MESSAGE_CHARS = 2500
 const RESULT_CHARS = 600
@@ -11,11 +11,11 @@ const MAX_CANDIDATES = 8
 
 // `children`: the T3 helper sessions this session delegated to ({ id, title }).
 export function pastPrompts(sessionId, children = []) {
-  const [path] = transcriptFiles(sessionId)
+  const path = mainTranscript(sessionId)
   if (!path) return []
   const subagents = sessionHistory(sessionId)
   const helpers = children.map(c => {
-    const [p] = transcriptFiles(c.id)
+    const p = mainTranscript(c.id)
     if (!p) return null
     let end = 0
     try { end = statSync(p).mtimeMs } catch {}
@@ -23,7 +23,7 @@ export function pastPrompts(sessionId, children = []) {
   }).filter(Boolean)
   const out = []
   let lastAnswer = '', prevAt = 0, model
-  for (const line of readLines(path)) {
+  for (const line of linesOf(path)) {
     if (!line) continue
     let d
     try { d = JSON.parse(line) } catch { continue }

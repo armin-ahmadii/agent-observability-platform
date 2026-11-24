@@ -10,7 +10,7 @@ import { queueDone } from './done-lists'
 import { gradeAgent } from './grades'
 import { HELPER_PREFIX, countUse, learnFrom, loadHelpers, withoutNotebook } from './helpers'
 import { drainInbox, publish } from './live'
-import { PANE, PANE_TITLE, registerPane } from './pane'
+import { PANE, PANE_TITLE, paneClockKey, registerPane } from './pane'
 import { planRun } from './plans'
 import { progressTool, registerProgressTool, reportProgress } from './progress'
 import { RATE_BATCH_MS, noteMessage, rateBatch } from './reactions'
@@ -46,6 +46,9 @@ const T3_THREAD_SEND_TOOL = /t3_thread_send$/
 /** One line, the first RESULT_CHARS characters of an answer. */
 const summary = (answer: string) => answer.replace(/\s+/g, ' ').trim().slice(0, RESULT_CHARS)
 
+/** What paneClockKey gave at the last redraw the tick asked for. */
+let lastClockKey = ''
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await readSettings($)
@@ -69,9 +72,14 @@ export const register: Register = on => {
     })
     $.clock.every(TICK_MS, () => {
       void (async () => {
-        await refreshUsage($)
-        $.ui.invalidate('ui.render')
-        await publish($, live)
+        const usage = await refreshUsage($)
+        // The pane's time axis moves even when no run changed; redraw only when it would look different.
+        const clockKey = paneClockKey(await getRuns($), await $.clock.now())
+        if (clockKey !== lastClockKey) {
+          lastClockKey = clockKey
+          $.ui.invalidate('ui.render')
+        }
+        await publish($, live, usage)
         await drainInbox($, live)
         await settleBlindMain($)
       })().catch(() => undefined)
@@ -138,7 +146,6 @@ export const register: Register = on => {
     if (id === MAIN) mainTurnStarted()
     await ensureRun($, id, e.text)
     await mark($, id, 'thinking')
-    $.ui.invalidate('ui.render')
     return next(e)
   })
 
@@ -162,15 +169,14 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // Runs before every model request, so it does one state write and nothing else.
   on('turn.step', async function* ($, e, next) {
     const id = e.agentId ?? MAIN
-    if (id === MAIN) sawMain(await $.clock.now())
-    if (await isTracked($, id)) {
-      await mark($, id, 'thinking')
-      // Remember which model and effort this agent actually runs on.
-      const effort = e.effort == null ? undefined : String(e.effort)
-      await patchRun($, id, run => (run.model !== e.model || run.effort !== effort ? { ...run, model: e.model, effort } : run))
-    }
+    const at = await $.clock.now()
+    if (id === MAIN) sawMain(at)
+    // Also remember which model and effort this agent actually runs on.
+    const effort = e.effort == null ? undefined : String(e.effort)
+    await mark($, id, 'thinking', { at, patch: () => ({ model: e.model, effort }) })
     return yield* next(e)
   })
 
@@ -183,9 +189,14 @@ export const register: Register = on => {
     }
     noteServerTool($, tool)
     const id = e.agentId ?? MAIN
-    if (id === MAIN) sawMain(await $.clock.now())
-    await ensureRun($, id, '')
-    await mark($, id, activityOf(tool), tool)
+    const at = await $.clock.now()
+    if (id === MAIN) sawMain(at)
+    // One write in the common case; an agent seen for the first time gets its row first.
+    const act = activityOf(tool)
+    if (!(await mark($, id, act, { tool, at }))) {
+      await ensureRun($, id, '')
+      await mark($, id, act, { tool, at })
+    }
 
     if (T3_DELEGATE_TOOL.test(tool)) return delegate($, id, args, () => next(e))
 
@@ -206,7 +217,6 @@ export const register: Register = on => {
       if (threadId) await route($, { runId: run?.id ?? threadId, label: run?.label ?? threadId, model: run?.model, kind: 'followup' })
       followUp($, run, String(args.message ?? ''))
     }
-    $.ui.invalidate('ui.render')
     if (TASK_TOOLS.test(tool)) {
       const out = await next(e)
       if (!out.deny && !out.isError) await recordTasks($, id, args, out.result).catch(() => {})

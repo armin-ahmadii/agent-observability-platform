@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { api } from './api'
 import { readJSON, writeJSON, readSession, writeSession } from './storage'
 import { localId } from '../lib/ids'
-import { WINS, type Chat, type CostMath, type DoneEntry, type Grade, type Limit, type McpRow, type Memory, type Run, type Session, type Snap, type Win } from '../lib/types'
+import { WINS, type Chat, type CodexLimits, type CostMath, type DoneEntry, type Grade, type Limit, type McpRow, type Memory, type Run, type Session, type Snap, type Win } from '../lib/types'
 
 export type Prefs = { stats: boolean; agents: boolean; tasks: boolean; chats: boolean; mcp: boolean; memory: boolean }
 export const PREF_LABELS: [keyof Prefs, string][] = [
@@ -19,7 +19,12 @@ const KEY = {
 }
 
 const POLL_MS = 1500
+const HIDDEN_POLL_MS = 15_000 // while the page isn't visible (a hidden tab or a collapsed side panel)
 const SIDE_DATA_MS = 10_000 // math, history, MCP and memory refresh at most this often
+const LONG_HISTORY_MS = 60_000 // All sessions' 7d/30d Earlier agents (megabytes): at most this often
+// A session's data is fetched again only when its file changed (its updatedAt in /api/sessions), or after this long
+// (the server also corrects it from other sources: T3's run records, resolved agents, usage totals).
+const UNCHANGED_REFRESH_MS = 5000
 const TITLE_WAIT_MS = 1500 // rows wait this long for short titles on first load, then show full ones
 const HIDE_SETTLE_MS = 4000 // a hidden session stays out this long after the server answered, until its list agrees
 
@@ -27,6 +32,8 @@ class Deck {
   // ----- from the server -----
   sessions: Session[] = []
   limits: Limit[] = []
+  limitsAt: number | null = null // when Claude's limits were last reported
+  codexLimits: CodexLimits | null = null
   snap: Snap | null = null
   lastSnap: Snap | null = null // the last non-null snap, drawn while the body fades out
   childSnaps = new Map<string, Snap>() // session id → snapshot, for delegated T3 tasks
@@ -83,6 +90,10 @@ class Deck {
   taskSession(label?: string) {
     return this.sessions.filter(x => (x.title === label || x.rawTitle === label) && x.id !== this.snap?.sessionId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
   }
+  // A T3 helper's own main run: from All sessions' helperMains when it has it, else from the helper's fetched session.
+  helperMain(sessionId: string): Run | undefined {
+    return this.snap?.helperMains?.[sessionId]?.main ?? this.childSnaps.get(sessionId)?.runs?.find(x => x.id === 'main')
+  }
   // Load a session's snapshot into childSnaps once (Previous orchestrators open with it).
   ensureChildSnap(id: string) {
     if (this.childSnaps.has(id)) return
@@ -91,6 +102,14 @@ class Deck {
   }
 
   // ----- loading -----
+  // What was last fetched for each key ("snap:<id><window>", "child:<id>"): the session's updatedAt then, and when.
+  private fetched = new Map<string, { stamp: number; at: number }>()
+  private isFresh(key: string, stamp: number) {
+    const f = this.fetched.get(key)
+    return !!f && f.stamp === stamp && Date.now() - f.at < UNCHANGED_REFRESH_MS
+  }
+  private noteFetched(key: string, stamp: number) { this.fetched.set(key, { stamp, at: Date.now() }) }
+  private historyAt = new Map<string, number>() // history key → when fetched
   // Polls can overlap (the 1.5s loop, a session switch, a hash change): only the newest one's answers are used.
   private pollSeq = 0
   async poll() {
@@ -101,6 +120,8 @@ class Deck {
       if (stale()) return
       const every: (Session & { hidden?: boolean })[] = Array.isArray(list) ? list : list?.sessions ?? []
       this.limits = list?.limits ?? []
+      this.limitsAt = list?.limitsAt ?? null
+      this.codexLimits = list?.codexLimits ?? null
       // Hidden sessions leave the menu and the lists, but still count in the All row's spend and weekly share.
       const sessions: Session[] = every.filter(s => !s.hidden && !this.hiding.has(s.id))
       if (this.chosen && this.chosen !== 'all' && every.some(s => s.id === this.chosen) && !sessions.some(s => s.id === this.chosen)) { this.chosen = 'all'; history.replaceState(null, '', '#all') }
@@ -112,7 +133,12 @@ class Deck {
       const pick = (this.viewChild && sessions.find(s => s.id === this.viewChild)) ||
         (this.chosen && sessions.find(s => s.id === this.chosen)) || [...sessions].filter(s => !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
       const w = pick?.id === 'all' ? this.winQuery() : '', askedWin = this.win
-      const fresh = pick ? await api.session(pick.id, w) : null
+      // Unchanged since the last fetch: keep the snap we have. All sessions changes when any session does.
+      const snapKey = 'snap:' + (pick?.id ?? '') + w
+      const stamp = pick?.id === 'all' ? Math.max(0, ...every.map(s => s.updatedAt || 0)) : pick?.updatedAt ?? 0
+      const reuse = !!pick && this.snap?.sessionId === pick.id && this.isFresh(snapKey, stamp)
+      const fresh = reuse ? this.snap : pick ? await api.session(pick.id, w) : null
+      if (pick && !reuse) this.noteFetched(snapKey, stamp)
       // A newer poll, or a timeframe switch while this was loading: drop this answer.
       if (stale() || (pick?.id === 'all' && askedWin !== this.win)) return
       this.snap = fresh
@@ -126,12 +152,18 @@ class Deck {
       this.render()
     } catch {}
   }
-  // Delegated T3 tasks: keep their own sessions' snapshots (live ones every poll, finished ones once).
+  // Delegated T3 tasks: keep their own sessions' snapshots (live ones whenever their file changed, finished ones once).
   private loadTaskSessions() {
+    const asked = new Set<string>()
     for (const r of this.snap?.runs ?? []) {
       if (r.type !== 'delegated') continue
       const s = this.taskSession(r.label)
-      if (s && (s.isLive || !this.childSnaps.has(s.id))) api.session(s.id).then(d => { if (d) this.childSnaps.set(s.id, d) }).catch(() => {})
+      if (!s || asked.has(s.id) || this.snap?.helperMains?.[s.id]) continue
+      const key = 'child:' + s.id
+      if (this.childSnaps.has(s.id) && (!s.isLive || this.isFresh(key, s.updatedAt))) continue
+      asked.add(s.id)
+      this.noteFetched(key, s.updatedAt)
+      api.session(s.id).then(d => { if (d) this.childSnaps.set(s.id, d) }).catch(() => {})
     }
   }
   // Everything besides the snapshot. All sessions answers for the timeframe asked; a late answer for an old one is dropped.
@@ -141,7 +173,12 @@ class Deck {
     const isMap = (d: unknown) => !!d && typeof d === 'object' && !Array.isArray(d)
     api.mcpHistory(id).then(rows => { this.mcpHist = { id, rows } }).catch(() => {})
     api.memory(id).then(d => { this.memory = { id, ...d } }).catch(() => {})
-    api.history(id, w).then(rows => { if (current()) this.agentHist = { id, rows } }).catch(() => {})
+    // Long timeframes' history is large and changes slowly (agents finishing now come from the live data anyway).
+    const histKey = id + w, long = id === 'all' && (askedWin === '7d' || askedWin === '30d')
+    if (!long || this.agentHist?.id !== id || Date.now() - (this.historyAt.get(histKey) ?? 0) > LONG_HISTORY_MS) {
+      this.historyAt.set(histKey, Date.now())
+      api.history(id, w).then(rows => { if (current()) this.agentHist = { id, rows } }).catch(() => {})
+    }
     if (id === 'all') api.chats(w).then(rows => { if (Array.isArray(rows) && askedWin === this.win) this.chats = { win: askedWin, rows } }).catch(() => {})
     // Titles render as soon as they come, so the first paint already has short titles.
     api.titles().then(t => { if (isMap(t)) { const first = !this.titles; this.titles = t; if (first) this.render() } }).catch(() => {})
@@ -151,8 +188,16 @@ class Deck {
     api.math(id, w).then(m => { if (current()) this.math = m && { ...m, id } }).catch(() => {})
   }
   start() {
-    const loop = async () => { await this.poll(); setTimeout(loop, POLL_MS) }
+    let timer = 0
+    const loop = async () => {
+      clearTimeout(timer)
+      await this.poll()
+      clearTimeout(timer)
+      timer = window.setTimeout(loop, document.hidden ? HIDDEN_POLL_MS : POLL_MS)
+    }
     loop()
+    // Shown again: refresh now and go back to the fast pace.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) loop() })
     addEventListener('hashchange', () => { this.chosen = location.hash.slice(1) || null; this.poll() })
   }
 

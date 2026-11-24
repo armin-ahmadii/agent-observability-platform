@@ -3,7 +3,7 @@ import { useDeck } from '../../data/store'
 import { usd, tok, MINUTE } from '../../lib/format'
 import type { Model } from '../../lib/tree'
 import type { Win } from '../../lib/types'
-import { setCostCard } from '../Tooltip'
+import { setCard } from '../Tooltip'
 import { Appear } from '../motion'
 import { costCardHtml, dayCardHtml } from './costCard'
 import { WinPicker, WIN_LABEL } from './WinPicker'
@@ -19,7 +19,7 @@ export function Stats({ m, show }: { m: Model; show: boolean }) {
   const day = snap.sessionId === 'all' ? snap.day : undefined
   const lbl = WIN_LABEL[(day?.win ?? '24h') as Win] ?? '24h'
   const total = day ? day.usd : snap.totalUsd ?? 0
-  setCostCard(day ? dayCardHtml(day) : costCardHtml(m, total))
+  setCard('cost', day ? dayCardHtml(day) : costCardHtml(m, total))
   if (!show) return <Appear>{null}</Appear>
   // Under the number: how fast it is climbing, and a warning shortly before the saved copy of the conversation expires.
   const mm = deck.math?.id === snap.sessionId ? deck.math : null

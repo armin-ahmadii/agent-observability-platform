@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ACTIVITY_LABEL, activityOf } from './activity.mjs'
 import { replyTokens, replyUsd } from './pricing.mjs'
-import { agentIdOfFile, isSubagentFile, mcpServerOf, readLines, readReplies, stripNotebook, transcriptFiles } from './transcripts.mjs'
+import { addReply, agentIdOfFile, forEachLine, isSubagentFile, linesOf, mainTranscript, mcpServerOf, stripNotebook, transcriptFiles } from './transcripts.mjs'
 
 const TEXT_CHARS = 4000
 const MAX_SEGMENTS = 300
@@ -13,7 +13,7 @@ const MERGE_GAP_MS = 3000 // same-kind tool calls closer than this share one tim
 // Every subagent this session ran: name, model, when, cost and tokens, brief, answer and timeline.
 const historyCache = new Map()
 export function sessionHistory(sessionId) {
-  const [main] = transcriptFiles(sessionId)
+  const main = mainTranscript(sessionId)
   if (!main) return []
   const dir = join(main.replace(/\.jsonl$/, ''), 'subagents')
   let names = []
@@ -35,25 +35,29 @@ function subagentRow(path, st) {
   let meta = {}
   try { meta = JSON.parse(readFileSync(path.replace(/\.jsonl$/, '.meta.json'), 'utf8')) } catch {}
   let start = Infinity, end = 0, usd = 0, tokens = 0, model = null
-  for (const { model: m, u, at } of readReplies(path).values()) {
+  // One pass reads both the timeline and the billed replies (the file is re-read only when it grew).
+  const replies = new Map()
+  const { brief, result, segments, errors } = readTrace(path, replies)
+  for (const { model: m, u, at } of replies.values()) {
     model = m
     if (at) { start = Math.min(start, at); end = Math.max(end, at) }
     usd += replyUsd(m, u)
     tokens += replyTokens(u)
   }
   if (start === Infinity) start = st.birthtimeMs
-  const { brief, result, segments, errors } = readTrace(path)
   return { id: agentIdOfFile(path), label: meta.description || meta.agentType || 'Agent', type: meta.agentType, model, startedAt: start, endedAt: end || st.mtimeMs, usd, tokens, brief, result, segments, errors }
 }
 
 // What an agent was asked, what it answered, and a timeline of its tool calls (same segment shape as the mod's).
-export function readTrace(path) {
+// With `replies`, also collects the billed replies (see readReplies) in the same pass.
+export function readTrace(path, replies = null) {
   let brief = '', result = '', errors = 0
   const segments = []
   const open = new Map() // tool_use id -> its segment
   let lastResultAt = 0
-  for (const line of readLines(path)) {
+  for (const line of linesOf(path)) {
     if (!line) continue
+    if (replies) addReply(replies, line)
     let d
     try { d = JSON.parse(line) } catch { continue }
     const at = Date.parse(d.timestamp) || 0
@@ -95,25 +99,25 @@ export function readTrace(path) {
 }
 
 // Every MCP server this session (and its subagents) called: calls, tools used, first and last use, which agents.
-const mcpCache = new Map()
+// Only the bytes added since the last read are read.
+const mcpCache = new Map() // path -> { offset, calls }
 function mcpCallsOf(path) {
-  const st = statSync(path)
-  const hit = mcpCache.get(path)
-  if (hit && hit.size === st.size) return hit.calls
-  const calls = []
-  for (const line of readLines(path)) {
-    if (!line.includes('"mcp__')) continue
-    try {
-      const d = JSON.parse(line)
-      if (d.type !== 'assistant') continue
-      for (const c of d.message?.content ?? []) {
-        if (c.type !== 'tool_use' || !String(c.name).startsWith('mcp__')) continue
-        calls.push({ server: mcpServerOf(c.name), tool: String(c.name).replace(/^mcp__.+?__/, ''), at: Date.parse(d.timestamp) || 0 })
-      }
-    } catch {}
-  }
-  mcpCache.set(path, { size: st.size, calls })
-  return calls
+  const size = statSync(path).size
+  let hit = mcpCache.get(path)
+  if (!hit || size < hit.offset) mcpCache.set(path, hit = { offset: 0, calls: [] })
+  if (size > hit.offset) hit.offset = forEachLine(path, line => addMcpCalls(hit.calls, line), hit.offset)
+  return hit.calls
+}
+function addMcpCalls(calls, line) {
+  if (!line.includes('"mcp__')) return
+  try {
+    const d = JSON.parse(line)
+    if (d.type !== 'assistant') return
+    for (const c of d.message?.content ?? []) {
+      if (c.type !== 'tool_use' || !String(c.name).startsWith('mcp__')) continue
+      calls.push({ server: mcpServerOf(c.name), tool: String(c.name).replace(/^mcp__.+?__/, ''), at: Date.parse(d.timestamp) || 0 })
+    }
+  } catch {}
 }
 
 export function sessionMcp(sessionId) {

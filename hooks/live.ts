@@ -13,15 +13,31 @@ import { titleAgent } from './titles'
 /** Most agents one page request may ask titles or done-lists for. */
 const MAX_INBOX_ITEMS = 60
 
-export async function publish($: $, live: Live) {
+/**
+ * Rewrite the session file at least this often even when nothing changed: the
+ * server counts a session as open while its file is under 10s old
+ * (LIVE_WITHIN_MS in live/lib/sessions.mjs).
+ */
+const HEARTBEAT_MS = 6000
+
+let lastBody = ''
+let lastWriteAt = 0
+
+type SessionUsage = Awaited<ReturnType<$['session']['usage']>>
+
+/**
+ * Write this session's snapshot to live/sessions/<id>.json, skipping the write
+ * when nothing but the time changed since the last one (up to HEARTBEAT_MS).
+ */
+export async function publish($: $, live: Live, usage: SessionUsage) {
   const list = await getRuns($)
   const saved = await getHelpers($)
   const recent = await getAsks($)
-  const usage = await $.session.usage()
+  const now = await $.clock.now()
   const snapshot = {
     sessionId: live.id,
     project: live.project,
-    updatedAt: await $.clock.now(),
+    updatedAt: 0, // set below, after the change check
     totalUsd: usage.cost?.usd ?? list.reduce((n, r) => n + r.usd, 0),
     // Your plan's usage windows (5-hour session, weekly), as Claude last reported them.
     rateLimits: usage.rateLimits.map(l => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })),
@@ -36,7 +52,12 @@ export async function publish($: $, live: Live) {
     lastAsk: recent[0] ?? null,
     recentAsks: recent,
   }
-  await $.fs.write(`${liveDir($)}/sessions/${live.id}.json`, JSON.stringify(snapshot))
+  const body = JSON.stringify(snapshot)
+  if (body === lastBody && now - lastWriteAt < HEARTBEAT_MS) return
+  // updatedAt is the third key, after two JSON strings, so this replaces only it.
+  await $.fs.write(`${liveDir($)}/sessions/${live.id}.json`, body.replace('"updatedAt":0', `"updatedAt":${now}`))
+  lastBody = body
+  lastWriteAt = now
 }
 
 /** One agent the page wants a title ("title") or a done-list ("done") for. */
@@ -61,15 +82,28 @@ function parseLine(line: string): InboxAction | undefined {
  * the other sessions' lines back to inbox.jsonl, and deletes the claim. A claim
  * left by an interrupted drain is finished first on the next tick.
  */
+/** The inbox as last read and found to hold nothing for this session ("<mtime>:<size>"), so an unchanged file isn't read again. */
+let seenInbox = ''
+/** Whether a claim file may be left over (checked once per session start, and after a drain that didn't finish). */
+let claimMayExist = true
+
 async function takeMine($: $, live: Live): Promise<InboxAction[]> {
   const dir = liveDir($)
   const inbox = `${dir}/inbox.jsonl`
   const claim = `${dir}/inbox.${live.id.replace(/[^\w.-]/g, '_')}.claimed`
   try {
-    if (!(await $.fs.exists(claim))) {
-      if (!(await $.fs.exists(inbox))) return []
+    if (!(claimMayExist && (await $.fs.exists(claim)))) {
+      claimMayExist = false
+      const stat = await $.fs.stat(inbox).catch(() => undefined)
+      if (!stat) return []
+      const seen = `${stat.mtimeMs}:${stat.size}`
+      if (seen === seenInbox) return []
       const lines = (await $.fs.read(inbox)).split('\n').filter(Boolean)
-      if (!lines.some(line => parseLine(line)?.sessionId === live.id)) return []
+      if (!lines.some(line => parseLine(line)?.sessionId === live.id)) {
+        seenInbox = seen
+        return []
+      }
+      claimMayExist = true
       const moved = await $.process.run(['mv', inbox, claim])
       if (moved.exitCode !== 0) return [] // another session took it first; ours come back next tick
     }
@@ -85,6 +119,7 @@ async function takeMine($: $, live: Live): Promise<InboxAction[]> {
       if (back.exitCode !== 0) return [] // keep the claim; retried next tick
     }
     await $.process.run(['rm', '-f', claim])
+    claimMayExist = false
     return mine
   } catch {
     return []

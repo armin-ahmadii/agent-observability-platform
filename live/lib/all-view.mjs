@@ -72,7 +72,21 @@ export function allSessions(win = '24h', only = null) {
   }
   const d = usageFor(win, only)
   const day = { win, usd: d.usd, tokens: d.tokens, mainUsd: d.mainUsd, subUsd: d.subUsd, chats: d.chats, subs: d.subs, pace: d.pace }
-  return { sessionId: 'all', project: 'All sessions', updatedAt: Date.now(), totalUsd, day, servers, serverTokens, runs: [...projects.values(), ...runs], helpers: [], rateLimits, sessions: list.length }
+  return { sessionId: 'all', project: 'All sessions', updatedAt: Date.now(), totalUsd, day, servers, serverTokens, runs: [...projects.values(), ...runs], helpers: [], rateLimits, sessions: list.length, helperMains: helperMains(list) }
+}
+
+// Open T3 helpers' own main runs, by helper session id: { [sessionId]: { main, lastAskAt } }. Lets the page show a
+// working helper's live progress without fetching its session every poll. Only helpers of the listed sessions.
+function helperMains(parents) {
+  const ids = new Set(parents.filter(s => !s.hidden).map(s => s.id))
+  const out = {}
+  for (const s of listSessions()) {
+    if (!s.isLive || !ids.has(s.parentId)) continue
+    const d = readSessionFile(s.id)
+    const main = d?.runs?.find(r => r.id === 'main')
+    if (main) out[s.id] = { main, lastAskAt: d.lastAsk?.at ?? d.recentAsks?.[0]?.at }
+  }
+  return out
 }
 
 // Every open session's MCP servers, added together.

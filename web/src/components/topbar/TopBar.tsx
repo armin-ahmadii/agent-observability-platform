@@ -5,7 +5,7 @@ import { Icon } from '../../icons/Icon'
 import { sessionName } from '../../lib/sessions'
 import type { Session } from '../../lib/types'
 import { Fold, Pop, Rows } from '../motion'
-import { SessionLimit, WeekRing } from './Limits'
+import { SessionLimit, UsageRings } from './Limits'
 import { SettingsMenu } from './SettingsMenu'
 
 // A session is Working (something is running), Idle (open, waiting on you) or Closed: [dot class, word].
@@ -66,7 +66,7 @@ export function TopBar() {
         ))}</Rows>
       </Pop>
       <SettingsMenu />
-      <WeekRing limits={deck.limits} />
+      <UsageRings />
     </div>
   )
 }

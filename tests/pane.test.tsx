@@ -36,3 +36,14 @@ test('a subagent shows its name, activity and servers on every surface', async (
     }
   }
 })
+
+test('an open pane redraws when a run changes, without waiting for the tick', async ($, on) => {
+  setup(on, {})
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.agent.spawn({ prompt: 'Design the empty state', description: 'Design empty state', subagentType: 'general-purpose' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Figma ×1/ })).toBeUndefined()
+  await $.tool.call({ tool: 'mcp__figma__get_design', agentId: 'a1' } as never)
+  expect(await ui.find({ type: 'Text', text: /Figma ×1/ })).toBeDefined()
+  await ui.unmount()
+})

@@ -1,6 +1,6 @@
 // Project memory. The mod writes reactions to memory/<project>.json; here they are added up per agent (praise
 // moves it up, frustration down) and the lessons collected. Thumbs from the page are written here directly.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendInbox } from './inbox.mjs'
 import { MEMORY_DIR } from './paths.mjs'
@@ -16,7 +16,18 @@ const projectFileName = project => String(project ?? 'other').replace(/[^\w.-]/g
 export const EMPTY_MEMORY = { events: [], agents: [], lessons: [] }
 
 // `project`: a project folder name, or "all" for every project.
+// Re-read only when a memory file was added, removed or changed (stat is cheap; parsing every file is not).
+const memoryCache = new Map() // project -> { sig, result }
 export function readMemory(project) {
+  let sig = ''
+  try { for (const n of readdirSync(MEMORY_DIR).sort()) { const st = statSync(join(MEMORY_DIR, n)); sig += `${n}:${st.mtimeMs}:${st.size};` } } catch {}
+  const hit = memoryCache.get(project)
+  if (hit && hit.sig === sig) return hit.result
+  const result = readMemoryNow(project)
+  memoryCache.set(project, { sig, result })
+  return result
+}
+function readMemoryNow(project) {
   let names = []
   try { names = readdirSync(MEMORY_DIR).filter(n => n.endsWith('.json') && n !== BACKFILLED_FILE) } catch {}
   if (project !== 'all') names = names.filter(n => n === projectFileName(project))

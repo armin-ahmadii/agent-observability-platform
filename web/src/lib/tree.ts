@@ -11,7 +11,7 @@ function linkTask(r: Run): Run {
   // No session of its own (helpers on other providers never load the mod): the server's state decides,
   // which it corrects from T3's run records once the helper finished.
   if (!s) return r.now === 'done' ? r : { ...r, now: 'running' }
-  const c = deck.childSnaps.get(s.id)?.runs?.find(x => x.id === 'main')
+  const c = deck.helperMain(s.id)
   // Working = its own main conversation is mid-turn. The session's "working" count is only a fallback: it also counts
   // that session's background helper, which can stay "running" long after the helper finished.
   const working = !!s.isLive && (c ? c.now !== 'done' : (s.working ?? 0) > 0)

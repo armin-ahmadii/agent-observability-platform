@@ -61,6 +61,8 @@ export type Snap = {
   helpers?: Helper[]
   lastAsk?: Ask | null
   recentAsks?: Ask[]
+  // All sessions: each open T3 helper's own main run, by the helper's session id (saves fetching each helper's session).
+  helperMains?: Record<string, { main: Run | null; lastAskAt?: number }>
   day?: { win?: string; usd: number; tokens: number; mainUsd: number; subUsd: number; chats: number; subs: number }
 }
 export type Session = {
@@ -83,6 +85,8 @@ export type Session = {
   day?: { usd: number; tokens: number; mainUsd: number; mainTokens: number } // this chat's last 24 hours
 }
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
+// The ChatGPT plan's limits, read by the server from Codex's logs. `at`: when Codex last reported them.
+export type CodexLimits = { plan: string | null; at: number; limits: { window: string; minutes: number | null; percentUsed: number; resetsAt: string | null }[] }
 export type MathModel = { model: string; requests: number; usd: number; parts: { label: string; tokens: number; rate: number | null; usd: number | null }[] }
 export type CostMath = { id: string; win?: string; usd: number; models?: MathModel[]; pace?: { last10: number }; cache?: { until?: number; rewriteUsd?: number; rereadUsd?: number } }
 export type McpRow = { server: string; calls: number; lastAt: number; tools: { name: string; n: number }[]; agents: unknown[] }

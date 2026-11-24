@@ -9,6 +9,21 @@
 .wk:empty { display: none; }
 .wk .t { white-space: nowrap; color: var(--fg2); }
 .wk .t b { font-weight: 500; color: var(--fg); }
+/* One ring per subscription (Claude, then ChatGPT with its logo); together they open the usage card. */
+.wk { gap: 12px; border-radius: 6px; }
+.wk-i { display: flex; align-items: center; gap: 8px; }
+.wk .logo { width: 16px; height: 16px; margin-right: -2px; }
+.wk .logo svg { width: 11px; height: 11px; }
+.wk:focus-visible { outline: 1px solid var(--line-strong); outline-offset: 4px; }
+
+/* The usage card (in the tooltip box): one heading per subscription, one line + thin bar per limit. */
+#tip.card.usage { width: min(300px, calc(100vw - 16px)); }
+#tip.card.usage h4 { display: flex; justify-content: space-between; gap: 12px; }
+#tip.card.usage h4 em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+#tip.card.usage .ln em { font-style: normal; color: var(--tip-fg2); white-space: nowrap; }
+#tip.card.usage .ub { height: 4px; margin: 3px 0 6px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+#tip.card.usage .ub i { display: block; height: 100%; border-radius: 2px; background: var(--tip-fg2); }
+#tip.card.usage .ub i.hot { background: var(--working); }
 .switch {
   display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 8px;
   border-radius: 6px; max-width: 100%; min-width: 0;

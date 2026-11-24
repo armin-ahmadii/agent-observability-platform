@@ -17,16 +17,18 @@ test('with Haiku off, a busy session makes no model calls and keeps every row', 
     spawned: () => ({ model: 'claude-opus-5-5', agentId: `a${++n}` }),
     modelComplete: () => (modelCalls++, answer('Build: should not happen')),
   })
-  const progress = (input: Record<string, unknown>) => $.tool.call({ tool: 'mcp__subagent-deck__progress', ...input } as never)
+  // One typed wrapper: spelling $.tool.call out at every line trips TypeScript's instantiation-depth limit.
+  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const progress = (input: Record<string, unknown>) => call({ tool: 'mcp__subagent-deck__progress', ...input })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.prompt.submit({ text: 'Great work!! Now build the totals view for the dashboard page', wait: false } as never)
   await $.agent.spawn({ prompt: 'Build the totals view on the dashboard page', description: 'Totals view', subagentType: 'general-purpose' } as never)
   await $.agent.spawn({ prompt: 'Research chart references for the page', description: 'Chart references', subagentType: 'general-purpose' } as never)
-  await $.tool.call({ tool: 'mcp__brandnew__write_thing', agentId: 'a1' } as never)
+  await call({ tool: 'mcp__brandnew__write_thing', agentId: 'a1' })
   await progress({ agentId: 'a1', steps: ['Read the code', 'Build the view'], done: [0], current: 1, now: 'Building the view' })
-  await $.tool.call({ tool: 'SendMessage', to: 'page-helper', message: 'Also add a legend to the chart' } as never)
-  await $.tool.call({ tool: 'mcp__t3-code__delegate_task', title: 'Page polish', task: 'Polish the spacing on the page' } as never)
+  await call({ tool: 'SendMessage', to: 'page-helper', message: 'Also add a legend to the chart' })
+  await call({ tool: 'mcp__t3-code__delegate_task', title: 'Page polish', task: 'Polish the spacing on the page' })
   await $.turn.complete({ agentId: 'a1', answer: 'Built the totals view and added the legend.', reason: 'answer' } as never)
   await $.turn.complete({ answer: 'All done.', reason: 'answer' } as never)
 

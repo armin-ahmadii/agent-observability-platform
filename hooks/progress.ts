@@ -73,6 +73,5 @@ export async function reportProgress($: $, id: string, input: Record<string, unk
       return next
     }),
   )
-  $.ui.invalidate('ui.render')
   return said || 'ok'
 }

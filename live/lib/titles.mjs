@@ -1,22 +1,25 @@
 // Session names: T3 Code's name for the chat, else the transcript's title, else the first message.
-import { readFileSync, statSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { withT3Db } from './t3-db.mjs'
 import { SECOND } from './time.mjs'
-import { cleanText, contentText, transcriptFiles } from './transcripts.mjs'
+import { cleanText, contentText, linesOf, mainTranscript } from './transcripts.mjs'
 
 const FIRST_MESSAGE_CHARS = 120
 
 // The last title Claude Code saved (one you or T3 set, else the one it made up), else your first message.
-// Only the lines added since the last read are parsed. Also collects the tasks handed to T3 helpers.
+// Only the bytes added since the last read are read, and only complete lines are parsed.
+// Also collects the tasks handed to T3 helpers.
 const titleCache = new Map()
 function readTitle(path) {
   const size = statSync(path).size
   const hit = titleCache.get(path)
   if (hit && hit.size === size) return hit
-  let title = hit?.title ?? null, custom = hit?.custom ?? false, first = hit?.first ?? null
-  const delegated = hit?.delegated ?? new Set()
-  const text = readFileSync(path, 'utf8').slice(hit ? hit.chars : 0)
-  for (const line of text.split('\n')) {
+  const from = hit && size >= hit.offset ? hit.offset : 0 // a file that shrank was rewritten: start over
+  const fresh = from === 0
+  let title = fresh ? null : hit.title, custom = fresh ? false : hit.custom, first = fresh ? null : hit.first
+  const delegated = fresh ? new Set() : hit.delegated
+  const state = {}
+  for (const line of linesOf(path, from, state)) {
     if (line.includes('delegate_task"') && line.includes('"tool_use"')) {
       try {
         for (const c of JSON.parse(line).message?.content ?? []) {
@@ -39,13 +42,13 @@ function readTitle(path) {
       else if (d.type === 'ai-title' && !custom && d.aiTitle) title = d.aiTitle
     } catch {}
   }
-  const entry = { size, title, custom, delegated, first, chars: (hit?.chars ?? 0) + text.length }
+  const entry = { size, offset: state.end ?? from, title, custom, delegated, first }
   titleCache.set(path, entry)
   return entry
 }
 
 function transcriptTitle(sessionId) {
-  const [path] = transcriptFiles(sessionId)
+  const path = mainTranscript(sessionId)
   if (!path) return null
   const t = readTitle(path)
   return t.title ?? t.first
@@ -53,7 +56,7 @@ function transcriptTitle(sessionId) {
 
 // Titles of the tasks a session handed to T3 helpers. A helper's own session takes its task's title.
 export function delegatedTitles(sessionId) {
-  const [path] = transcriptFiles(sessionId)
+  const path = mainTranscript(sessionId)
   return path ? [...readTitle(path).delegated] : []
 }
 

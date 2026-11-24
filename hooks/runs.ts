@@ -3,7 +3,7 @@
 
 import type { Route, Run, TaskItem } from '../types'
 import { planRun } from './plans'
-import { type $, capRuns, BRIEF_CHARS, MAIN, TRIAGE, findRun, isTracked, patchRun, updateRuns, updateAsks } from './state'
+import { type $, capRuns, BRIEF_CHARS, MAIN, TRIAGE, findRun, getRuns, isTracked, patchRun, updateRuns, updateAsks } from './state'
 import { titleAgent } from './titles'
 
 const MAIN_LABEL = 'Main conversation'
@@ -66,51 +66,97 @@ function attentionOf(status: string | undefined, previous: Run['attention']): Ru
   return previous === 'error' ? 'error' : undefined
 }
 
-/** Copy cost, tokens, model, status and context from Claude Code onto every run (or just `onlyId`). */
-export async function refreshUsage($: $, onlyId?: string) {
+type AgentInfo = Awaited<ReturnType<$['agent']['list']>>[number]
+type SessionUsage = Awaited<ReturnType<$['session']['usage']>>
+
+const sameContext = (a: Run['context'], b: Run['context']) => a === b || (!!a && !!b && a.used === b.used && a.window === b.window)
+
+/** `next` when any field the usage refresh sets differs from `run`, else `run` itself (so an unchanged list keeps its identity). */
+function keepIfSame(run: Run, next: Run): Run {
+  const a = run.segments[run.segments.length - 1]
+  const b = next.segments[next.segments.length - 1]
+  const same =
+    run.usd === next.usd &&
+    run.tokens === next.tokens &&
+    run.costKnown === next.costKnown &&
+    run.model === next.model &&
+    run.status === next.status &&
+    run.attention === next.attention &&
+    run.cacheUntil === next.cacheUntil &&
+    run.effort === next.effort &&
+    sameContext(run.context, next.context) &&
+    (a === b || (!!a && !!b && a.end === b.end && a.tokens === b.tokens))
+  return same ? run : next
+}
+
+/** The runs with Claude Code's latest usage applied; the same array when nothing changed. */
+function withUsage(list: Run[], agents: AgentInfo[], usage: SessionUsage, at: number, onlyId?: string): Run[] {
+  const sessionUsd = usage.cost?.usd
+  const byId = new Map(agents.map(a => [a.id, a]))
+  let changed = false
+  const next = list.map(run => {
+    if (onlyId && run.id !== onlyId) return run
+    if (run.id === TRIAGE) return run
+    let updated: Run
+    if (run.id === MAIN) {
+      // The main row is the session total minus every subagent this session ran
+      // (finished ones too: agent.list drops those) and the background helper.
+      const agentsUsd = list.reduce((n, r) => (r.id === MAIN || r.id === TRIAGE ? n : n + (byId.get(r.id)?.cost?.usd ?? r.usd ?? 0)), 0)
+      const triageUsd = list.find(r => r.id === TRIAGE)?.usd ?? 0
+      const context = usage.context?.tokens != null ? { used: usage.context.tokens, window: usage.context.window } : run.context
+      updated = sessionUsd === undefined ? { ...run, context } : { ...run, context, usd: Math.max(0, sessionUsd - agentsUsd - triageUsd) }
+    } else {
+      const info = byId.get(run.id)
+      if (!info) {
+        if (run.costKnown !== undefined || run.tokens !== 0) return run
+        updated = { ...run, costKnown: false }
+      } else {
+        const tokens = (info.usage ?? []).reduce((n, u) => n + u.input_tokens + u.output_tokens + u.cache_creation_input_tokens, 0)
+        const total = tokens || run.tokens
+        let segments = run.segments
+        const last = segments[segments.length - 1]
+        if (last && run.now !== 'done') {
+          segments = [...segments]
+          segments[segments.length - 1] = { ...last, end: at, tokens: Math.max(0, total - last.tokensAtStart) }
+        }
+        const request = info.lastRequest
+        const effort = request?.effort ?? info.effort
+        updated = {
+          ...run,
+          costKnown: info.cost !== undefined,
+          usd: info.cost?.usd ?? run.usd,
+          tokens: total,
+          segments,
+          model: request?.model ?? info.model ?? run.model,
+          status: info.status,
+          attention: attentionOf(info.status, run.attention),
+          context: info.contextWindowSize ? { used: info.tokenCount, window: info.contextWindowSize } : run.context,
+          cacheUntil: request?.cacheTtl ? request.at + (request.cacheTtl === '1h' ? CACHE_1H_MS : CACHE_5M_MS) : run.cacheUntil,
+          effort: effort != null ? String(effort) : run.effort,
+        }
+      }
+    }
+    const kept = keepIfSame(run, updated)
+    if (kept !== run) changed = true
+    return kept
+  })
+  return changed ? next : list
+}
+
+/**
+ * Copy cost, tokens, model, status and context from Claude Code onto every run
+ * (or just `onlyId`). Writes state only when something changed. Returns the
+ * session usage it read, so the 2s tick asks for it once.
+ */
+export async function refreshUsage($: $, onlyId?: string): Promise<SessionUsage> {
   const agents = await $.agent.list()
   const usage = await $.session.usage()
-  const sessionUsd = usage.cost?.usd
   const at = await $.clock.now()
-  const byId = new Map(agents.map(a => [a.id, a]))
-  await updateRuns($, list =>
-    list.map(run => {
-      if (onlyId && run.id !== onlyId) return run
-      if (run.id === TRIAGE) return run
-      if (run.id === MAIN) {
-        // The main row is the session total minus every subagent this session ran
-        // (finished ones too: agent.list drops those) and the background helper.
-        const agentsUsd = list.reduce((n, r) => (r.id === MAIN || r.id === TRIAGE ? n : n + (byId.get(r.id)?.cost?.usd ?? r.usd ?? 0)), 0)
-        const triageUsd = list.find(r => r.id === TRIAGE)?.usd ?? 0
-        const context = usage.context?.tokens != null ? { used: usage.context.tokens, window: usage.context.window } : run.context
-        return sessionUsd === undefined ? { ...run, context } : { ...run, context, usd: Math.max(0, sessionUsd - agentsUsd - triageUsd) }
-      }
-      const info = byId.get(run.id)
-      if (!info) return run.costKnown === undefined && run.tokens === 0 ? { ...run, costKnown: false } : run
-      const tokens = (info.usage ?? []).reduce((n, u) => n + u.input_tokens + u.output_tokens + u.cache_creation_input_tokens, 0)
-      const total = tokens || run.tokens
-      const segments = [...run.segments]
-      const last = segments[segments.length - 1]
-      if (last && run.now !== 'done') {
-        segments[segments.length - 1] = { ...last, end: at, tokens: Math.max(0, total - last.tokensAtStart) }
-      }
-      const request = info.lastRequest
-      const effort = request?.effort ?? info.effort
-      return {
-        ...run,
-        costKnown: info.cost !== undefined,
-        usd: info.cost?.usd ?? run.usd,
-        tokens: total,
-        segments,
-        model: request?.model ?? info.model ?? run.model,
-        status: info.status,
-        attention: attentionOf(info.status, run.attention),
-        context: info.contextWindowSize ? { used: info.tokenCount, window: info.contextWindowSize } : run.context,
-        cacheUntil: request?.cacheTtl ? request.at + (request.cacheTtl === '1h' ? CACHE_1H_MS : CACHE_5M_MS) : run.cacheUntil,
-        effort: effort != null ? String(effort) : run.effort,
-      }
-    }),
-  )
+  const list = await getRuns($)
+  if (withUsage(list, agents, usage, at, onlyId) !== list) {
+    await updateRuns($, current => withUsage(current, agents, usage, at, onlyId))
+  }
+  return usage
 }
 
 /** Add a route to your newest message while its main turn is still open. */
