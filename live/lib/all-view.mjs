@@ -27,11 +27,14 @@ const isScratchFolder = p => /^\d{4}-\d{2}-\d{2}-.*-[0-9a-f]{8}$/.test(String(p 
 const projectKey = p => 'project:' + (isScratchFolder(p) ? 'scratch' : String(p ?? 'other'))
 const projectLabel = p => isScratchFolder(p) ? 'Scratch chats' : String(p ?? 'Other')
 
+const RECENT_ASKS = 5
+
 // Each open session's main conversation becomes a row named after the session, its agents nested under it,
 // and sessions are grouped under their project (the folder they run in).
 export function allSessions(win = '24h', only = null) {
   const list = listSessions().filter(x => x.isLive && !x.parentId)
   const runs = [], servers = {}, serverTokens = {}
+  const recentAsks = {} // { [sessionId]: RoutedAsk[] }, newest first, for the My input section
   let totalUsd = 0, rateLimits
   for (const s of list) {
     const d = readSessionFile(s.id)
@@ -41,6 +44,7 @@ export function allSessions(win = '24h', only = null) {
     Object.assign(servers, d.servers ?? {})
     if (s.hidden) continue // hidden from the dashboard: still counted in the totals above
     for (const [k, v] of Object.entries(d.serverTokens ?? {})) serverTokens[k] = (serverTokens[k] ?? 0) + v
+    if (d.recentAsks?.length) recentAsks[s.id] = d.recentAsks.slice(0, RECENT_ASKS)
     for (const r of d.runs ?? []) {
       if (r.id === 'triage') continue
       const id = `${s.id}:${r.id}`
@@ -72,7 +76,7 @@ export function allSessions(win = '24h', only = null) {
   }
   const d = usageFor(win, only)
   const day = { win, usd: d.usd, tokens: d.tokens, mainUsd: d.mainUsd, subUsd: d.subUsd, chats: d.chats, subs: d.subs, pace: d.pace }
-  return { sessionId: 'all', project: 'All sessions', updatedAt: Date.now(), totalUsd, day, servers, serverTokens, runs: [...projects.values(), ...runs], helpers: [], rateLimits, sessions: list.length, helperMains: helperMains(list) }
+  return { sessionId: 'all', project: 'All sessions', updatedAt: Date.now(), totalUsd, day, servers, serverTokens, runs: [...projects.values(), ...runs], helpers: [], rateLimits, sessions: list.length, helperMains: helperMains(list), recentAsks }
 }
 
 // Open T3 helpers' own main runs, by helper session id: { [sessionId]: { main, lastAskAt } }. Lets the page show a

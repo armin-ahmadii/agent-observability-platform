@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { answer, setup } from './harness'
+import { answer, callTool, setup } from './harness'
 
 test('past 40 runs the oldest agents go; the main row and background helper stay', async ($, on) => {
   let n = 0
@@ -15,7 +15,7 @@ test('past 40 runs the oldest agents go; the main row and background helper stay
   for (let i = 0; i < 45; i++) {
     await $.agent.spawn({ prompt: `Agent number ${i} does a task`, description: `Agent ${i}`, subagentType: 'general-purpose' } as never)
   }
-  await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  await callTool($, { tool: 'Read', file_path: '/x' })
   await clock.advance(2000)
   const runs = snapshot<{ runs: { id: string; startedAt: number }[] }>().runs
   expect(runs.length).toBe(40)
@@ -91,8 +91,8 @@ test('two delegate_task calls in the same millisecond get their own rows', async
   const { clock, snapshot } = setup(on, {})
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await Promise.all([
-    $.tool.call({ tool: 'mcp__t3-code__delegate_task', title: 'One', task: 'First task' } as never),
-    $.tool.call({ tool: 'mcp__t3-code__delegate_task', title: 'Two', task: 'Second task' } as never),
+    callTool($, { tool: 'mcp__t3-code__delegate_task', title: 'One', task: 'First task' }),
+    callTool($, { tool: 'mcp__t3-code__delegate_task', title: 'Two', task: 'Second task' }),
   ])
   await clock.advance(2000)
   const tasks = snapshot().runs.filter(r => r.type === 'delegated')

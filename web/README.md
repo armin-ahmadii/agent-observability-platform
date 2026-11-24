@@ -27,10 +27,11 @@ Icons are Central Icons (iconists license, see LICENSE); add new ones with gen-i
 | Row click/keyboard handling | src/components/agents/rowEvents.ts | |
 | Resolve (clears a stopped/failed/error marker, dashboard only) | RowParts.tsx `RowAction` → rowEvents.ts → `deck.resolve` → POST /api/resolve | styles/agents.css (`.act.res`) |
 | Scroll to an agent asked for from Tasks | src/components/agents/useReveal.ts | |
-| Opened agent: heading, prompt/result (Show more), meta, View details, thumbs | src/components/breakdown/Breakdown.tsx | styles/breakdown.css |
+| Opened agent: heading, current requests, result; "More details" fold (past requests, prompt, meta, View details, thumbs, lanes) | src/components/breakdown/Breakdown.tsx | styles/breakdown.css |
 | Its checklist (to-dos, done items, planned steps, helper jobs) | src/components/breakdown/Checklist.tsx | styles/breakdown.css |
 | Its lanes timeline | src/components/breakdown/Lanes.tsx | styles/breakdown.css |
 | Light Markdown for results | src/components/breakdown/MdLite.tsx | styles/breakdown.css |
+| Your prompts as balls: an avatar-style stack per row ("+n" past three), the bubble that becomes a ball, the traveller that rides the tree line to a helper's row, the row's flash | src/components/messages/MessageBalls.tsx (the `.balls` column is in RowParts.tsx) | styles/agents.css (`.balls`, `.ball`, `.mf*`) |
 | Tasks (your recent requests and where they went) | src/components/Requests.tsx | styles/requests.css |
 | MCP servers | src/components/McpServers.tsx | styles/mcp.css |
 | Project memory | src/components/ProjectMemory.tsx | styles/memory.css |

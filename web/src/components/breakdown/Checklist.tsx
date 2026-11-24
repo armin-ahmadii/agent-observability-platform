@@ -1,10 +1,13 @@
-// The agent's list (see listOf): to-do items with their state, finished items (all checked), planned steps (hollow),
-// or the background helper's jobs. When the agent ended in an error or was stopped, its unfinished items are marked failed.
+// The agent's list (see listOf): your requests (each opening to its steps), to-do items with their state, finished
+// items (all checked), planned steps (hollow), or the background helper's jobs.
+// When the agent ended in an error or was stopped, its unfinished items are marked failed.
 import { Icon } from '../../icons/Icon'
 import { clock } from '../../lib/format'
 import type { AgentList } from '../../lib/agents'
+import { AskList } from './AskList'
 
-export function Checklist({ list, failed, planDone, planNow }: { list: NonNullable<AgentList>; failed: boolean; planDone?: number[]; planNow?: number }) {
+export function Checklist({ list, failed, planDone, planNow, runKey, runDone }: { list: NonNullable<AgentList>; failed: boolean; planDone?: number[]; planNow?: number; runKey: string; runDone: boolean }) {
+  if (list.kind === 'asks') return <AskList asks={list.items} runKey={runKey} runDone={runDone} failed={failed} />
   if (list.kind === 'jobs') return <ul className="tasks jobs">{list.items.map((j, i) => (
     <li key={i} className={'tk ' + (j.ok === false ? 'failed' : 'done')}>
       <span className="tk-m"><Icon name={j.ok === false ? 'task_fail' : 'task_ok'} /></span><span className="tk-t">{j.what}</span><span className="tk-n">{clock(j.at)}</span>

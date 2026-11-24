@@ -1,6 +1,7 @@
 # Runtime data the mod and the server write into live/ (personal; never commit)
 live/sessions/
 live/memory/
+live/threads/
 live/*.json
 !live/icons.json
 live/*.json.tmp

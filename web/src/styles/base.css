@@ -8,7 +8,8 @@
   --fg: #171717;
   --fg2: #666666;
   --fg3: #767676;
-  --working: #a86b00;
+  --working: #1f6bff; /* blue = thinking: in-progress rings and marks, the flash on the row a message went to */
+  --warn: #a86b00; /* amber: warnings and running-hot marks only, never "in progress" */
   --alert: #d93025;
   --task-ok: #5cc664;
   --task-fail: #ca383c;
@@ -17,6 +18,7 @@
   /* The model column fits the widest short name in full ("Sonnet 5.5" measures 64.7px at 13px), at every depth. */
   --mdl-w: 68px;
   --live: #1a9f5c;
+  --msg: #2563eb; /* your message bubble */
   --a-thinking: #8b5cf6;
   --a-checking: #0e7490;
   --a-delegating: #64748b;
@@ -34,8 +36,10 @@
   --mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --ease-fast: cubic-bezier(0.62, 0.61, 0.02, 1); /* the page's one easing curve: every transition uses it */
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Dark: set on <html data-theme> (the OS scheme, or the Settings choice). */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0e0f10;
     --panel: #17181a;
     --hover: rgba(255, 255, 255, 0.045);
@@ -44,7 +48,8 @@
     --fg: #f7f8f8;
     --fg2: #a8adb5;
     --fg3: #80848b;
-    --working: #f2c94c;
+    --working: #4d8dff;
+    --warn: #f2c94c;
     --alert: #ff6b63;
     --task-ok: #5cc664;
     --task-fail: #e0484c;
@@ -62,7 +67,6 @@
     --tip-fg2: #9a9ea6;
     --tip-line: #34363a;
     --menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px #2a2c30;
-  }
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); }

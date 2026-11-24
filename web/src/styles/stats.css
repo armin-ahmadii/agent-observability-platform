@@ -14,7 +14,7 @@
 .stat .s { display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--fg2); font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; cursor: default; }
 .stat .s:empty { display: none; }
 .stat .s span { white-space: nowrap; }
-.stat .s .exp { color: var(--working); border-radius: 3px; }
+.stat .s .exp { color: var(--warn); border-radius: 3px; }
 .stat .k [data-card] { cursor: help; text-decoration: underline dotted var(--fg3); text-underline-offset: 3px; border-radius: 3px; }
 .stat .k [data-card]:focus-visible { outline: 1px solid var(--line-strong); outline-offset: 2px; }
 #tip.card, #tip.card[hidden] { display: block; }

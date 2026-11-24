@@ -71,7 +71,8 @@ export function finishedAgents(ms = DAY) {
 }
 
 // A T3 helper run `r` of `parent`, merged with its own session's main run when that session is known.
-function finishedHelper(parent, r, all, from, where) {
+// (Exported for tests.)
+export function finishedHelper(parent, r, all, from, where) {
   const child = all.filter(x => (x.title === r.label || x.rawTitle === r.label) && x.id !== parent.id).sort((a, b) => b.updatedAt - a.updatedAt)[0]
   if (child && child.isLive && child.working > 0) return null // still at work: it is a live row
   const c = child ? readSessionFile(child.id)?.runs?.find(x => x.id === 'main') ?? null : null
@@ -83,7 +84,7 @@ function finishedHelper(parent, r, all, from, where) {
     ...r, id: `${parent.id}:${r.id}`, parentId: undefined, sessionOf: parent.id, where: where(parent.id), now: 'done', endedAt,
     session: child?.id, usd: child ? child.totalUsd ?? 0 : r.usd, costKnown: child ? child.costKnown !== false : r.costKnown, // Codex helpers have no price list
     ...(c ? { segments: c.segments ?? [], mcp: c.mcp ?? {}, tokens: c.tokens ?? 0, model: c.model ?? r.model, effort: c.effort ?? r.effort,
-      tasks: c.tasks?.length ? c.tasks : r.tasks, done: c.done?.length ? c.done : r.done, plan: c.plan?.length ? c.plan : r.plan,
+      tasks: c.tasks?.length ? c.tasks : r.tasks, done: c.done?.length ? c.done : r.done, plan: c.plan?.length ? c.plan : r.plan, asks: c.asks?.length ? c.asks : r.asks,
       attention: isResolved(parent.id, r) ? undefined : c.attention ?? r.attention, startedAt: Math.min(r.startedAt ?? Infinity, c.startedAt ?? Infinity) } : {}),
   }
 }

@@ -2,12 +2,13 @@
 // snapshot in live/sessions/<id>.json, and presses on the page, which arrive
 // as lines in live/inbox.jsonl tagged with a session id.
 
+import type { Run } from '../types'
 import { queueDone } from './done-lists'
 import { type GradeInput, gradeAgent } from './grades'
 import { saveRun, toggleHelper } from './helpers'
 import { type RateItem, rateFeedback } from './reactions'
 import { registry } from './servers'
-import { type $, type Live, liveDir, getRuns, getHelpers, getAsks } from './state'
+import { type $, type Live, getAsks, getHelpers, getRuns, liveDir, ownThreadId, readLiveJson, session, threadFile, updateAsks, writeLiveJson } from './state'
 import { titleAgent } from './titles'
 
 /** Most agents one page request may ask titles or done-lists for. */
@@ -22,18 +23,82 @@ const HEARTBEAT_MS = 6000
 
 let lastBody = ''
 let lastWriteAt = 0
+let lastUsage: SessionUsage | undefined
+let writeQueued = false
 
 type SessionUsage = Awaited<ReturnType<$['session']['usage']>>
+
+/**
+ * Write the session file right away rather than on the next tick: the page
+ * shows your message, its routes and its answer as they happen. Calls in one
+ * burst (a message and its first route) share one write.
+ */
+export function publishNow($: $) {
+  if (writeQueued || !session.live) return
+  writeQueued = true
+  void Promise.resolve()
+    .then(async () => {
+      writeQueued = false
+      const live = session.live
+      if (live) await publish($, live, lastUsage ?? (await $.session.usage()))
+    })
+    .catch(() => {
+      writeQueued = false
+    })
+}
+
+/** In a T3 helper's own session: record which Claude session works in its thread, for the parent's routes. */
+export async function recordOwnThread($: $, live: Live) {
+  const thread = ownThreadId()
+  if (thread) await writeLiveJson($, threadFile(thread), { threadId: thread, sessionId: live.id }, 0)
+}
+
+const childSessions = new Map<string, string>()
+
+/** The Claude session working in a T3 helper thread, once it has started (see recordOwnThread). */
+export async function childSessionOf($: $, threadId: string | undefined): Promise<string | undefined> {
+  if (!threadId) return undefined
+  const known = childSessions.get(threadId)
+  if (known) return known
+  // A miss costs one exists check (the file appears once the helper starts).
+  const found = (await readLiveJson<{ sessionId?: unknown } | null>($, threadFile(threadId), null))?.sessionId
+  if (typeof found !== 'string' || !found) return undefined
+  childSessions.set(threadId, found)
+  return found
+}
+
+/** How long after a message the tick keeps looking for a new helper's session. */
+const CHILD_LOOKUP_MS = 10 * 60_000
+
+/** Fill in `sessionId` on recent routes to T3 helpers whose session has started since. */
+export async function fillRouteSessions($: $, now: number, runs: Run[]) {
+  const asks = await getAsks($)
+  const found = new Map<string, string>()
+  for (const ask of asks) {
+    if (now - ask.at > CHILD_LOOKUP_MS) continue
+    for (const r of ask.routedTo) {
+      if (r.sessionId || r.kind === 'subagent' || found.has(r.runId)) continue
+      const sessionId = await childSessionOf($, runs.find(x => x.id === r.runId)?.childThreadId)
+      if (sessionId) found.set(r.runId, sessionId)
+    }
+  }
+  if (!found.size) return
+  await updateAsks($, list =>
+    list.map(a => ({ ...a, routedTo: a.routedTo.map(r => (!r.sessionId && found.has(r.runId) ? { ...r, sessionId: found.get(r.runId)! } : r)) })),
+  )
+}
 
 /**
  * Write this session's snapshot to live/sessions/<id>.json, skipping the write
  * when nothing but the time changed since the last one (up to HEARTBEAT_MS).
  */
-export async function publish($: $, live: Live, usage: SessionUsage) {
-  const list = await getRuns($)
+/** `known` passes the runs and time the caller already read (the 2s tick does). */
+export async function publish($: $, live: Live, usage: SessionUsage, known?: { runs: Run[]; now: number }) {
+  lastUsage = usage
+  const list = known?.runs ?? (await getRuns($))
   const saved = await getHelpers($)
   const recent = await getAsks($)
-  const now = await $.clock.now()
+  const now = known?.now ?? (await $.clock.now())
   const snapshot = {
     sessionId: live.id,
     project: live.project,
@@ -51,6 +116,8 @@ export async function publish($: $, live: Live, usage: SessionUsage) {
     // Your newest message and where it went; the last 5, newest first.
     lastAsk: recent[0] ?? null,
     recentAsks: recent,
+    // In a T3 helper's own session: its T3 thread (the parent's run for it has this as childThreadId).
+    ...(ownThreadId() ? { t3ThreadId: ownThreadId() } : {}),
   }
   const body = JSON.stringify(snapshot)
   if (body === lastBody && now - lastWriteAt < HEARTBEAT_MS) return

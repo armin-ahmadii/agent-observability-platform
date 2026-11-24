@@ -9,21 +9,21 @@
 // If any step finds nothing, or more than one match, nothing is written for that call (it is never guessed).
 //
 // What it writes: live/sessions/<codex thread id>.json, a helper session file in the mod's format (a `main` run
-// with plan/planSource/planDone/planNow/nowText/nowAt), so the page merges it into the delegated row like a Claude
+// with asks and plan/planSource/planDone/planNow/nowText/nowAt), so the page merges it into the delegated row like a Claude
 // helper's own session. Activity and tokens come from Codex's own session log (rollout) for that thread.
 // No dependencies. Node 22.13 or later (node:sqlite).
-// It imports only lib/live-dir.mjs: lib/paths.mjs (and t3-db.mjs, which uses it) parse the server's command line
-// when loaded, which would reject or misread this process's arguments.
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync, openSync, readSync, closeSync } from 'node:fs'
-import { homedir } from 'node:os'
+// It imports only lib modules with no side effects (live-dir, home-paths, t3-db): lib/paths.mjs parses the server's
+// command line when loaded, which would reject or misread this process's arguments.
+import { readdirSync, readFileSync, renameSync, statSync, writeFileSync, openSync, readSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
+import { CODEX_SESSIONS_DIR } from './lib/home-paths.mjs'
 import { resolveLiveDir } from './lib/live-dir.mjs'
+import { withT3Db } from './lib/t3-db.mjs'
 
 const LIVE_DIR = resolveLiveDir() // SUBAGENT_DECK_LIVE, else this folder (same rule as the mod and the server)
 const SESSIONS_DIR = join(LIVE_DIR, 'sessions')
-const CODEX_SESSIONS = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions')
-const T3_DB_PATH = join(homedir(), '.t3', 'userdata', 'statev2.sqlite')
+const T3_DB_WAIT_MS = 200 // a progress call can wait a little longer for T3's database than a page request
 
 const MAX_STEPS = 8
 const TICK_MS = 2000 // the page treats a session file written in the last 10 s as open
@@ -35,12 +35,13 @@ const PARENT_MAX_AGE_MS = 7 * 24 * 3600 * 1000
 const PROGRESS_SPEC = {
   name: 'progress',
   description:
-    "Report your progress to the owner's dashboard. Call at the start with your steps, then each time you start or finish a step, " +
-    "and to say in 5 words or fewer what you're doing now. Steps are indexed from 0 in the order you gave them. Cheap; returns ok.",
+    "Report your progress to the owner's dashboard. Call at the start with the owner's request (`ask`) and your steps, then each time you start or finish a step, " +
+    "and to say in 5 words or fewer what you're doing now. Steps are indexed from 0 in the order you gave them and belong to the current ask. Cheap; returns ok.",
   inputSchema: {
     type: 'object',
     properties: {
-      steps: { type: 'array', items: { type: 'string' }, maxItems: MAX_STEPS, description: 'Your steps in order, each at most 6 words, imperative. Replaces the list; to add steps, send the whole list with the new ones at the end.' },
+      ask: { type: 'string', description: 'The owner\'s request this work is for, 5–7 words, in the owner\'s terms (e.g. "Add resolve button to failed rows"). Send it on your first call and whenever you start on a new request; leave it out otherwise.' },
+      steps: { type: 'array', items: { type: 'string' }, maxItems: MAX_STEPS, description: 'Your steps for the current ask, in order, each at most 6 words, imperative. Replaces the list; to add steps, send the whole list with the new ones at the end.' },
       done: { type: 'array', items: { type: 'integer' }, description: 'Indexes of steps now finished.' },
       current: { type: 'integer', description: 'Index of the step you are working on now.' },
       now: { type: 'string', description: "What you're doing right now, at most 5 words, e.g. \"Removing tooltips from Agents.tsx\"." },
@@ -51,31 +52,84 @@ const PROGRESS_SPEC = {
 const clip = (value, words, chars) =>
   String(value).replace(/\s+/g, ' ').trim().replace(/[.]+$/, '').split(' ').slice(0, words).join(' ').slice(0, chars)
 
-// Same rules as applyProgress in hooks/progress.ts.
+// ---- asks: a copy of hooks/asks.ts (change both together) ----
+// Each owner's request ("ask") owns its steps; plan/planSource/planDone/planNow mirror the latest ask.
+// Codex calls arrive before the row's label is known, so an ask with no title yet is stored as '' and named
+// after the row when the session file is written (titledAsks).
+const MAX_ASKS = 20
+const askTitle = v => (typeof v === 'string' ? clip(v, 7, 60) : '')
+
+function closeIfDone(ask, at) {
+  if (ask.finishedAt !== undefined) return ask
+  return ask.steps.every((_, i) => ask.done.includes(i)) ? { ...ask, finishedAt: at } : ask
+}
+
+function mirror(run, asks) {
+  const latest = asks[asks.length - 1]
+  const next = { ...run, asks }
+  if (!latest) return next
+  if (latest.steps.length) Object.assign(next, { plan: latest.steps, planSource: 'agent', planDone: latest.done, planNow: latest.now })
+  else if (run.planSource === 'agent') Object.assign(next, { plan: undefined, planSource: undefined, planDone: undefined, planNow: undefined })
+  return next
+}
+
+function startAsk(run, title, at) {
+  const asks = (run.asks ?? []).map((a, i, all) => (i === all.length - 1 ? closeIfDone(a, at) : a))
+  return mirror(run, [...asks, { title, at, steps: [], done: [] }].slice(-MAX_ASKS))
+}
+
+function finishLatestAsk(run, at) {
+  const latest = run.asks?.[run.asks.length - 1]
+  if (!latest || latest.finishedAt !== undefined) return run
+  return { ...run, asks: [...run.asks.slice(0, -1), { ...latest, finishedAt: at }] }
+}
+
+// Same rules as applyProgress in hooks/asks.ts (Codex helpers have no owner's-message asks, so no renaming).
 function applyProgress(r, input, at) {
-  const next = { ...r }
+  const title = askTitle(input.ask)
+  let next = r
+  const latest = () => next.asks?.[next.asks.length - 1]
+  if (title && latest()?.title !== title) next = startAsk(next, title, at)
+  const hasUpdate = Array.isArray(input.steps) || Array.isArray(input.done) || input.current !== undefined || typeof input.now === 'string'
+  if (!hasUpdate) return next
+  if (!latest()) {
+    if (next.planSource === 'agent' && next.plan?.length) {
+      // Steps reported before asks existed: they become the first ask.
+      next = { ...next, asks: [{ title: '', at, steps: next.plan, done: next.planDone ?? [], ...(next.planNow !== undefined ? { now: next.planNow } : {}) }] }
+    } else if (Array.isArray(input.steps) && input.steps.some(x => typeof x === 'string' && x.trim())) {
+      next = startAsk(next, '', at)
+    } else {
+      return typeof input.now === 'string' && input.now.trim() ? { ...next, nowText: clip(input.now, 5, 60), nowAt: at } : next
+    }
+  }
+  const asks = [...next.asks]
+  const ask = { ...asks[asks.length - 1] }
   if (Array.isArray(input.steps)) {
     const steps = input.steps.filter(x => typeof x === 'string' && x.trim()).map(x => clip(x, 6, 60)).slice(0, MAX_STEPS)
     if (steps.length) {
-      next.plan = steps
-      next.planSource = 'agent'
-      next.planDone = (r.planSource === 'agent' ? r.planDone ?? [] : []).filter(i => i < steps.length)
-      if (next.planNow !== undefined && next.planNow >= steps.length) next.planNow = undefined
+      ask.steps = steps
+      ask.done = ask.done.filter(i => i < steps.length)
+      if (ask.now !== undefined && ask.now >= steps.length) ask.now = undefined
     }
   }
-  const n = next.planSource === 'agent' ? next.plan?.length ?? 0 : 0
+  const n = ask.steps.length
   const valid = x => Number.isInteger(x) && x >= 0 && x < n
   if (Array.isArray(input.done)) {
-    next.planDone = [...new Set([...(next.planDone ?? []), ...input.done.filter(valid)])].sort((a, b) => a - b)
-    if (next.planNow !== undefined && next.planDone.includes(next.planNow)) next.planNow = undefined
+    ask.done = [...new Set([...ask.done, ...input.done.filter(valid)])].sort((a, b) => a - b)
+    if (ask.now !== undefined && ask.done.includes(ask.now)) ask.now = undefined
   }
-  if (valid(input.current)) next.planNow = input.current
+  if (valid(input.current)) ask.now = input.current
   if (typeof input.now === 'string' && input.now.trim()) {
-    next.nowText = clip(input.now, 5, 60)
-    next.nowAt = at
+    ask.nowText = clip(input.now, 5, 60)
+    next = { ...next, nowText: ask.nowText, nowAt: at }
   }
-  return next
+  if (ask.finishedAt !== undefined) delete ask.finishedAt
+  asks[asks.length - 1] = ask
+  return mirror(next, asks)
 }
+
+/** Untitled asks (steps sent before any `ask`) take the row's label. */
+const titledAsks = (asks, label) => asks?.map(a => (a.title ? a : { ...a, title: askTitle(label) || 'Current task' }))
 
 // ---- per Codex thread ----
 /** threadId → { run, link, lastCallAt, rollout: { path, offset, rest, working, tokens, lastAt }, writtenDone } */
@@ -101,8 +155,9 @@ function onProgress(threadId, input, meta) {
   t.run = applyProgress(t.run ?? existingRun(threadId) ?? {}, input, at)
   t.writtenDone = false
   tickThread(threadId, t)
-  const n = t.run.planSource === 'agent' ? t.run.plan?.length ?? 0 : 0
-  return `ok${n ? ` (${t.run.planDone?.length ?? 0}/${n} done)` : ''}`
+  const ask = t.run.asks?.[t.run.asks.length - 1]
+  const n = ask?.steps.length ?? 0
+  return `ok${n ? ` (${ask.done.length}/${n} done)` : ''}`
 }
 
 // A file this thread already wrote (an earlier Codex process, e.g. after a restart): keep its progress.
@@ -110,25 +165,18 @@ function existingRun(threadId) {
   try {
     const main = JSON.parse(readFileSync(join(SESSIONS_DIR, `${threadId}.json`), 'utf8')).runs?.find(r => r.id === 'main')
     if (!main) return null
-    const { plan, planSource, planDone, planNow, nowText, nowAt } = main
-    return { plan, planSource, planDone, planNow, nowText, nowAt }
+    const { plan, planSource, planDone, planNow, nowText, nowAt, asks } = main
+    return { plan, planSource, planDone, planNow, nowText, nowAt, asks }
   } catch { return null }
 }
 
 // ---- attribution: Codex thread → T3 child thread → the one delegated run that names it ----
-let sqlite = null
 function t3AppThreadId(codexThreadId) {
-  let db
-  try {
-    sqlite ??= process.getBuiltinModule?.('node:sqlite') ?? null
-    if (!sqlite || !existsSync(T3_DB_PATH)) return null
-    db = new sqlite.DatabaseSync(T3_DB_PATH, { readOnly: true, timeout: 200 })
-    const rows = db.prepare(`SELECT DISTINCT json_extract(payload_json, '$.appThreadId') AS app
-      FROM orchestration_v2_projection_provider_threads
-      WHERE json_extract(payload_json, '$.driver') = 'codex' AND json_extract(payload_json, '$.nativeThreadRef.nativeId') = ?`).all(codexThreadId)
-    const apps = rows.map(r => r.app).filter(Boolean)
-    return apps.length === 1 ? String(apps[0]) : null
-  } catch { return null } finally { try { db?.close() } catch {} }
+  const apps = withT3Db(db => db.prepare(`SELECT DISTINCT json_extract(payload_json, '$.appThreadId') AS app
+    FROM orchestration_v2_projection_provider_threads
+    WHERE json_extract(payload_json, '$.driver') = 'codex' AND json_extract(payload_json, '$.nativeThreadRef.nativeId') = ?`).all(codexThreadId)
+    .map(r => r.app).filter(Boolean), T3_DB_WAIT_MS)
+  return apps?.length === 1 ? String(apps[0]) : null
 }
 
 function findDelegatedRun(appThreadId, ownFile) {
@@ -173,10 +221,10 @@ function findRollout(threadId) {
   const suffix = `-${threadId}.jsonl`
   // Newest day folders first (sessions/YYYY/MM/DD).
   const sortedDirs = p => { try { return readdirSync(p).filter(n => /^\d+$/.test(n)).sort().reverse() } catch { return [] } }
-  for (const y of sortedDirs(CODEX_SESSIONS)) {
-    for (const m of sortedDirs(join(CODEX_SESSIONS, y))) {
-      for (const d of sortedDirs(join(CODEX_SESSIONS, y, m))) {
-        const dir = join(CODEX_SESSIONS, y, m, d)
+  for (const y of sortedDirs(CODEX_SESSIONS_DIR)) {
+    for (const m of sortedDirs(join(CODEX_SESSIONS_DIR, y))) {
+      for (const d of sortedDirs(join(CODEX_SESSIONS_DIR, y, m))) {
+        const dir = join(CODEX_SESSIONS_DIR, y, m, d)
         try {
           const f = readdirSync(dir).find(n => n.endsWith(suffix))
           if (f) return join(dir, f)
@@ -245,6 +293,7 @@ function writeSession(threadId, t, working) {
     effort: t.effort ?? L.effort,
     ...(t.run ?? {}),
   }
+  if (main.asks) main.asks = titledAsks(main.asks, L.label)
   const path = join(SESSIONS_DIR, `${threadId}.json`)
   // Each write replaces the file (new birth time), so the session's start is kept inside it, set once.
   t.fileStartedAt ??= startedAtInFile(path) ?? startedAt
@@ -282,7 +331,11 @@ function tickThread(threadId, t) {
   readRollout(t, threadId)
   const working = t.rollout?.working ?? (now - t.lastCallAt < KEEP_FRESH_AFTER_CALL_MS)
   if (working) { t.writtenDone = false; writeSession(threadId, t, true) }
-  else if (!t.writtenDone) { writeSession(threadId, t, false); t.writtenDone = true }
+  else if (!t.writtenDone) {
+    if (t.run) t.run = finishLatestAsk(t.run, now) // the helper's turn is over
+    writeSession(threadId, t, false)
+    t.writtenDone = true
+  }
 }
 
 setInterval(() => { for (const [id, t] of threads) tickThread(id, t) }, TICK_MS).unref()

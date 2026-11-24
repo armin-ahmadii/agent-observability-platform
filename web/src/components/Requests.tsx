@@ -1,29 +1,17 @@
 // Tasks: each of your recent requests and where it went, as a small tree in the Agents row style:
 // the request (one line) and its state, the agents it went to, and the subagents they started for it.
-// Clicking an agent scrolls to its row (or Earlier agents) and opens it.
+// Clicking an agent scrolls to its row (or Earlier agents); the row itself stays as it was.
 import { useDeck } from '../data/store'
 import { Logo, ModelName, ShowMore, Title } from './common'
 import { Appear, Fold, Rows } from './motion'
 import { cleanMsg } from '../lib/format'
 import { isMainRow, isQueued, isWorking, shortOf } from '../lib/agents'
 import type { Model } from '../lib/tree'
+import { isAsk, runForRoute } from '../lib/routes'
 import type { Ask, Route, Run } from '../lib/types'
 
 // Requests shown before "+N more".
 const TOP = 5
-// T3 "Delegated task node" notices are not your messages.
-const isAsk = (a?: Ask | null): a is Ask => !!a && !!a.text && !/^Delegated task node[:\s]/.test(a.text)
-
-// A route names a run id; a follow-up to a T3 helper names its thread instead, so match the delegated run that opened that thread.
-function runForRoute(rt: Route, runs: Run[]): Run | null {
-  const hit = runs.find(r => r.id === rt.runId)
-  if (hit) return hit
-  let id = rt.runId
-  try { id = decodeURIComponent(id) } catch {}
-  return runs.filter(r => r.childThreadId && id.startsWith(r.childThreadId))
-    .sort((a, b) => b.childThreadId!.length - a.childThreadId!.length || (b.startedAt ?? 0) - (a.startedAt ?? 0))[0] ?? null
-}
-
 type Node = { key: string; depth: number; run: Run | null; route?: Route; open?: string }
 type State = 'queued' | 'working' | 'done'
 const WORD: Record<State, string> = { queued: 'Queued', working: 'Working', done: 'Done' }

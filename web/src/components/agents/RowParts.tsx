@@ -14,6 +14,7 @@ export function RowShell({ id, className, sel, lead, mid, tokens, cost }: {
   return <div className={className} data-run={id} tabIndex={0} role="button" aria-expanded={sel}>
     {lead}
     <div className="mid">{mid}</div>
+    <div className="balls" />{/* your messages this agent holds: filled in by MessageBalls, never by React */}
     <div className="num c-tok">{tokens}</div>
     <div className="num c-usd">{cost}</div>
     <div className="c-dchev"><span className="dchev" aria-hidden="true"><Icon name="dchev" /></span></div>
@@ -58,7 +59,7 @@ export function RowAction({ r }: { r: Run }) {
 
 // "Saving…" shows until the mod confirms, or gives up after this long.
 const SAVE_TIMEOUT_MS = 8000
-export function SaveButton({ r }: { r: Run }) {
+function SaveButton({ r }: { r: Run }) {
   const deck = useDeck()
   if (r.savedAs) deck.saving.delete(r.id)
   const t = deck.saving.get(r.id)

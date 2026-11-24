@@ -6,3 +6,7 @@
 .smenu button { gap: 12px; }
 .smenu [aria-checked="true"] .tog { background: var(--fg); }
 .smenu [aria-checked="true"] .tog::after { transform: translateX(12px); background: var(--bg); }
+/* Between kinds of setting (sections, list behaviour, appearance): a hairline across the menu. */
+.smenu .msep { height: 1px; margin: 4px -4px; background: var(--line); }
+/* Every row's highlight sits 4px inside the menu's 8px corners, so its corners follow the menu's. */
+.smenu button { border-radius: 4px; }

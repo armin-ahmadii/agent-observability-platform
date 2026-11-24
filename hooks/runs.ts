@@ -2,6 +2,7 @@
 // ledger, where your requests were routed, and agents' to-do lists.
 
 import type { Route, Run, TaskItem } from '../types'
+import { publishNow } from './live'
 import { planRun } from './plans'
 import { type $, capRuns, BRIEF_CHARS, MAIN, TRIAGE, findRun, getRuns, isTracked, patchRun, updateRuns, updateAsks } from './state'
 import { titleAgent } from './titles'
@@ -148,10 +149,10 @@ function withUsage(list: Run[], agents: AgentInfo[], usage: SessionUsage, at: nu
  * (or just `onlyId`). Writes state only when something changed. Returns the
  * session usage it read, so the 2s tick asks for it once.
  */
-export async function refreshUsage($: $, onlyId?: string): Promise<SessionUsage> {
+export async function refreshUsage($: $, onlyId?: string, now?: number): Promise<SessionUsage> {
   const agents = await $.agent.list()
   const usage = await $.session.usage()
-  const at = await $.clock.now()
+  const at = now ?? (await $.clock.now())
   const list = await getRuns($)
   if (withUsage(list, agents, usage, at, onlyId) !== list) {
     await updateRuns($, current => withUsage(current, agents, usage, at, onlyId))
@@ -161,17 +162,21 @@ export async function refreshUsage($: $, onlyId?: string): Promise<SessionUsage>
 
 /** Add a route to your newest message while its main turn is still open. */
 export async function route($: $, r: Route) {
+  let added = false
   await updateAsks($, list => {
     const ask = list[0]
     if (!ask || ask.answeredAt !== undefined) return list
     if (ask.routedTo.some(x => x.runId === r.runId && x.kind === r.kind)) return list
+    added = true
     return [{ ...ask, routedTo: [...ask.routedTo, r].slice(-MAX_ROUTES) }, ...list.slice(1)]
   })
+  if (added) publishNow($)
 }
 
 /** Mark your newest message answered. */
 export async function answerAsk($: $, at: number) {
   await updateAsks($, list => (list[0] && list[0].answeredAt === undefined ? [{ ...list[0], answeredAt: at }, ...list.slice(1)] : list))
+  publishNow($)
 }
 
 // ---------- to-do lists ----------

@@ -1,5 +1,9 @@
 // Every call to the local server (server.mjs). GETs return parsed JSON; POSTs never throw.
-const get = (path: string) => fetch(path).then(r => r.json())
+// Every call gives up after FETCH_TIMEOUT_MS, so one stuck request can't hold the page (the next poll tries again).
+const FETCH_TIMEOUT_MS = 5000
+const send = (path: string, init?: RequestInit) => fetch(path, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+const post = (path: string, body: unknown) => send(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+const get = (path: string) => send(path).then(r => r.json())
 const q = (id: string) => '?id=' + encodeURIComponent(id)
 export const api = {
   sessions: () => get('/api/sessions'),
@@ -13,12 +17,12 @@ export const api = {
   titles: () => get('/api/titles'),
   done: () => get('/api/done'),
   action: (sessionId: string, body: Record<string, unknown>) =>
-    fetch('/api/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ...body }) }).catch(() => {}),
+    post('/api/action', { sessionId, ...body }).catch(() => {}),
   hide: (id: string, unhide = false) =>
-    fetch('/api/hide', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, unhide }) }).catch(() => {}),
+    post('/api/hide', { id, unhide }).catch(() => {}),
   // true when the server stored it
   resolve: (sessionId: string, runId: string) =>
-    fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, runId }) }).then(r => r.ok, () => false),
+    post('/api/resolve', { sessionId, runId }).then(r => r.ok, () => false),
   vote: (body: Record<string, unknown>) =>
-    fetch('/api/vote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {}),
+    post('/api/vote', body).catch(() => {}),
 }

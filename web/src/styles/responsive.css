@@ -1,6 +1,8 @@
 /* Narrow-width rules (820/600/480/420/380) and reduced motion. Imported last so they win. */
 @media (max-width: 820px) {
   .page { padding: 12px 16px 56px; }
+  #mf-corner { right: 16px; }
+  .mf { max-width: min(calc(100vw - 32px), 360px); }
   :root { --share-w: 96px; }
   .c-tok { width: 68px; }
   .c-usd { width: 64px; }

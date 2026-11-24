@@ -58,7 +58,17 @@ const freshTasks = (r: Run) => !isMainRow(r) || (Number(r.tasksAt) || 0) > lastA
 const freshPlan = (r: Run) => !isMainRow(r) || (Number(r.nowAt) || 0) > lastAskAt(r)
 
 // Steps for the row's ring: its own to-do list, else the steps it reported with the progress tool (never Haiku's guess).
+// A main conversation that lists your requests (see listOf) counts finished requests, not their steps.
+// Its reply ending marks a request finished; one with steps still open (a helper may still be on it) doesn't count yet.
+// Any other agent counts the steps of its latest request (a helper usually has just one request).
+const askDone = (a: NonNullable<Run['asks']>[number]) => !!a.finishedAt && (a.steps ?? []).every((_, i) => (a.done ?? []).includes(i))
 export function stepsOf(r: Run): { x: number; y: number } | null {
+  if (r.asks?.length && isMainRow(r) && listOf(r)?.kind === 'asks') return { x: r.asks.filter(askDone).length, y: r.asks.length }
+  const latest = !isMainRow(r) ? r.asks?.[r.asks.length - 1] : undefined
+  if (latest?.steps?.length) {
+    const y = latest.steps.length
+    return { x: new Set((latest.done ?? []).filter(i => i >= 0 && i < y)).size, y }
+  }
   if (r.tasks?.length && !freshTasks(r)) return r.planSource === 'agent' && r.plan?.length && freshPlan(r) ? stepsOf({ ...r, tasks: [] }) : null
   if (r.planSource === 'agent' && r.plan?.length && !freshPlan(r)) return r.tasks?.length ? stepsOf({ ...r, planSource: undefined }) : null
   if (r.tasks?.length) return { x: r.tasks.filter(t => t.status === 'done').length, y: r.tasks.length }
@@ -74,10 +84,14 @@ export function stepsOf(r: Run): { x: number; y: number } | null {
 // A finished agent's plan shows only if the agent reported it itself: Haiku's guessed steps never tick, so after the
 // agent finished they would only look undone.
 export type AgentList = { kind: 'tasks'; items: NonNullable<Run['tasks']> } | { kind: 'done' | 'plan'; items: string[] }
+  | { kind: 'asks'; items: NonNullable<Run['asks']> }
   | { kind: 'jobs'; items: NonNullable<Run['triageJobs']> } | null
 export function listOf(r: Run): AgentList {
   // The background helper: the jobs it has done, newest first.
   if (r.type === 'triage' || r.id === 'triage') return r.triageJobs?.length ? { kind: 'jobs', items: [...r.triageJobs].reverse() } : null
+  // Your requests, each with the steps the agent took for it (agents that report them; older ones fall through).
+  // Requests with no steps at all while the agent has a flat list: show the flat list rather than hide its steps.
+  if (r.asks?.length && (r.asks.some(a => a.steps?.length) || !(r.plan?.length || r.tasks?.length))) return { kind: 'asks', items: r.asks }
   // A main conversation: only steps from its current request (see freshTasks), never an old finished list.
   if (isMainRow(r)) {
     if (r.tasks?.length && freshTasks(r)) return { kind: 'tasks', items: r.tasks }

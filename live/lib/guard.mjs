@@ -6,7 +6,15 @@ export const MAX_BODY_BYTES = 1 << 20 // 1 MB; the page's largest post (a batch 
 
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]']
 
-export const allowedHosts = port => LOCAL_HOSTNAMES.map(h => `${h}:${port}`)
+const allowedHosts = port => LOCAL_HOSTNAMES.map(h => `${h}:${port}`)
+
+// Why a WebSocket upgrade must be refused, or null. Browsers always send Origin on one; it must be this page's.
+export function upgradeRefusal({ headers }, port) {
+  const host = refusal({ method: 'GET', headers }, port)
+  if (host) return host
+  if (headers.origin !== undefined && headers.origin.toLowerCase() !== `http://${String(headers.host).toLowerCase()}`) return { status: 403, reason: 'cross-origin request' }
+  return null
+}
 
 // Why a request must be refused ({ status, reason }), or null when it may go ahead.
 // `headers`: Node's lower-cased request headers.

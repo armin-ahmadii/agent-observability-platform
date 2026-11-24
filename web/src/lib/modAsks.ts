@@ -37,7 +37,7 @@ export function askDone(list: Run[]) {
   postInBatches('done', items)
 }
 
-export type GradeItem = { id: string; result?: string; endedAt?: number; startedAt?: number; [k: string]: unknown }
+type GradeItem = { id: string; result?: string; endedAt?: number; startedAt?: number; [k: string]: unknown }
 // Grades for finished agents that handed something back.
 export function askGrades(list: GradeItem[]) {
   if (!deck.grades) return

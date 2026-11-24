@@ -5,7 +5,7 @@
 .ring circle { fill: none; stroke-width: 2.5; }
 .ring .bg { stroke: var(--line-strong); }
 .ring .fg { stroke: var(--fg2); stroke-linecap: round; }
-.ring .fg.hot { stroke: var(--working); }
+.ring .fg.hot { stroke: var(--warn); }
 .wk:empty { display: none; }
 .wk .t { white-space: nowrap; color: var(--fg2); }
 .wk .t b { font-weight: 500; color: var(--fg); }
@@ -30,7 +30,7 @@
 #tip.card.usage .ln em { font-style: normal; color: var(--tip-fg2); white-space: nowrap; }
 #tip.card.usage .ub { height: 4px; margin: 3px 0 6px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 #tip.card.usage .ub i { display: block; height: 100%; border-radius: 2px; background: var(--tip-fg2); }
-#tip.card.usage .ub i.hot { background: var(--working); }
+#tip.card.usage .ub i.hot { background: var(--warn); }
 .switch {
   display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 8px;
   border-radius: 6px; max-width: 100%; min-width: 0;
@@ -73,7 +73,7 @@
 .lim-t em { font-style: normal; color: var(--fg2); }
 .lim-bar { margin-top: 5px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .lim-bar i { display: block; height: 100%; background: var(--fg2); border-radius: 2px; }
-.lim-bar i.hot { background: var(--working); }
+.lim-bar i.hot { background: var(--warn); }
 @keyframes pulse { 50% { opacity: 0.45; } }
 /* Back to the parent session (inside a helper's own session). */
 .back { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 8px 0 4px; border-radius: 6px; color: var(--fg2); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 40%; }

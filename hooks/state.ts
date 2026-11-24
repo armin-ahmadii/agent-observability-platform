@@ -3,7 +3,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Ask, Helper, Run } from '../types'
+import type { Helper, RoutedAsk, Run } from '../types'
 import { liveDirFor } from './live-dir'
 
 export type $ = EngineInterface
@@ -27,13 +27,20 @@ export const ANSWER_CHARS = 3500
 const runs = atom({ plugin: 'subagent-deck', key: 'runs' } as const, [] as Run[], { shape: 'runs-2' })
 const helpers = atom({ plugin: 'subagent-deck', key: 'helpers' } as const, [] as Helper[], { shape: 'helpers-1' })
 /** Your last few messages and where each was routed (newest first). */
-const asks = atom({ plugin: 'subagent-deck', key: 'asks' } as const, [] as Ask[], { shape: 'asks-1' })
+const asks = atom({ plugin: 'subagent-deck', key: 'asks' } as const, [] as RoutedAsk[], { shape: 'asks-1' })
 
 export function getRuns($: $) {
   return read($, runs)
 }
 export function updateRuns($: $, change: (list: Run[]) => Run[]) {
   return update($, runs, change)
+}
+/**
+ * The runs state's version: it only grows while the state lives, so a smaller
+ * number than before means the engine reset the state (see restore.ts).
+ */
+export async function runsVersion($: $): Promise<number> {
+  return (await $.state.get({ plugin: 'subagent-deck', key: 'runs' })).version
 }
 export function getHelpers($: $) {
   return read($, helpers)
@@ -44,7 +51,7 @@ export function updateHelpers($: $, change: (list: Helper[]) => Helper[]) {
 export function getAsks($: $) {
   return read($, asks)
 }
-export function updateAsks($: $, change: (list: Ask[]) => Ask[]) {
+export function updateAsks($: $, change: (list: RoutedAsk[]) => RoutedAsk[]) {
   return update($, asks, change)
 }
 
@@ -90,6 +97,7 @@ export function titleKey(run: Run): string {
 
 let resolvedLiveDir: string | undefined
 let haikuOn = true
+let ownT3Thread: string | undefined
 
 /** SUBAGENT_DECK_HAIKU=off (or 0, false, no; any case) turns the Haiku background helper off. */
 export function haikuSwitch(value: string | undefined): boolean {
@@ -105,15 +113,28 @@ export async function readSettings($: $) {
   let override: string | undefined
   let home: string | undefined
   let haiku: string | undefined
+  let t3Thread: string | undefined
   try {
     override = await $.env.get('SUBAGENT_DECK_LIVE') // the server reads the same variable
     home = await $.env.get('HOME')
     haiku = await $.env.get('SUBAGENT_DECK_HAIKU')
+    t3Thread = await $.env.get('T3CODE_THREAD_ID') // set by T3 Code in a helper's own session
   } catch {
     // no environment to read: the plugin's own folder, Haiku on
   }
   resolvedLiveDir = liveDirFor($.plugin.root, override, home)
   haikuOn = haikuSwitch(haiku)
+  ownT3Thread = t3Thread?.trim() || undefined
+}
+
+/** In a T3 helper's own session: its T3 thread id (the parent's run has it as `childThreadId`). */
+export function ownThreadId(): string | undefined {
+  return ownT3Thread
+}
+
+/** The file under live/ that maps a T3 thread to the Claude session working in it. */
+export function threadFile(threadId: string): string {
+  return `threads/${threadId.replace(/[^\w.-]/g, '_')}.json`
 }
 
 /** Whether the Haiku background helper may run (titles, plans, done-lists, grades, reactions, server sorting). */

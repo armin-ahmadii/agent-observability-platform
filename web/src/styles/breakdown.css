@@ -1,4 +1,4 @@
-/* Opened agent (breakdown): heading, checklist, brief, result, meta, lanes timeline. */
+/* Opened agent (breakdown): heading, current requests or checklist, result; then "More details" (past requests, prompt, meta, lanes timeline). */
 .detail { display: grid; grid-template-columns: auto minmax(0, 1fr); padding: 0 8px; }
 .d-lead { grid-row: 1 / span 4; display: flex; }
 .d-lead .pad { flex: none; }
@@ -40,7 +40,8 @@
 .lane .track i:hover::before { inset: -6px -4px; }
 .lane .num { justify-content: flex-end; color: var(--fg2); }
 .lane .l-tok { color: var(--fg2); }
-.detail > :last-child { padding-bottom: 18px; }
+/* No extra space at the panel's foot: its last line ("More details", the lanes, or Earlier agents) brings its own
+   4–6px, which with that line's own inset matches the space above the heading. */
 /* The agent's checklist (the prompt sits behind "Show prompt"). */
 .tasks { list-style: none; margin: 6px 0 2px; padding: 0; }
 .tk { display: flex; align-items: flex-start; gap: 8px; padding: 2px 0; line-height: 20px; }
@@ -62,7 +63,28 @@
 .tk.planned .tk-t { color: var(--fg2); }
 .tk.planned .tk-m svg circle { stroke-dasharray: 2.5 2.5; }
 .tasks + .more { display: block; }
+/* Your requests: one line each (state, title, steps done, chevron), opening to the steps taken for it. */
+.ask-h { text-align: left; margin: 0 -6px; padding: 2px 6px; width: calc(100% + 12px); border-radius: 5px; }
+.ask-h:hover:not(:disabled) { background: var(--hover); }
+.ask-h:disabled { color: inherit; cursor: default; }
+.ask-h:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.ask-h.done .tk-t { color: var(--fg2); }
+.ask-h .dchev { flex: none; width: 16px; height: 20px; margin-left: 4px; color: var(--fg3); }
+.ask-h:hover .dchev, .ask.open .dchev { color: var(--fg); }
+.ask.open .dchev svg { transform: rotate(180deg); }
+.tasks.steps { margin: 0 0 4px 24px; }
+/* The fold for finished requests. */
+.ask-past { margin-top: 6px; }
+.ask-past .tk-t { color: var(--fg2); }
+.ask-past.open .dchev svg { transform: rotate(180deg); }
+.ask-past + .tasks { margin-top: 2px; }
 
 /* All sessions: an orchestrator's Earlier agents, at the end of its breakdown. */
 .d-after { grid-column: 2; padding-bottom: 6px; }
 .d-after .hist-h { margin-top: 4px; }
+/* "More details": closed until clicked. */
+.d-more { margin: 6px 0 4px -4px; }
+.detail > .fold { grid-column: 2; }
+.d-extra { padding-bottom: 6px; }
+.d-extra > .more { display: block; margin-top: 6px; }
+.d-extra > .ask-past:first-child { margin-top: 0; }

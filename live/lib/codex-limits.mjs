@@ -4,15 +4,13 @@
 // Many events carry null windows, so the newest reading with a window wins, across recent files.
 // Each file is read once (backwards from its end until a reading turns up), then only its new bytes.
 import { closeSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { CODEX_SESSIONS_DIR } from './home-paths.mjs'
 import { DAY, SECOND } from './time.mjs'
 
 const LOOKBACK_DAYS = 8 // the longest window Codex reports is a week
 const RELIST_MS = 15 * SECOND // look for new or grown files at most this often
 const CHUNK_BYTES = 256 * 1024
-
-export const CODEX_SESSIONS_DIR = join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions')
 
 // The newest reading with a window among the lines of `text`, or null. A reading: { at, rl }.
 function newestReading(text) {

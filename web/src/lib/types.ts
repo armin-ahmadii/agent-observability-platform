@@ -44,10 +44,14 @@ export type Run = {
   planSource?: 'agent' | 'guess'
   triageJobs?: { what: string; at: number; ok?: boolean }[] // the background helper's recent jobs, newest last
   planNow?: number
+  asks?: AgentAsk[]
   [k: string]: unknown
 }
-export type TaskItem = { id?: string; text: string; status: 'pending' | 'in_progress' | 'done' }
-export type Route = { runId: string; label: string; model?: string; kind: 'subagent' | 'delegated' | 'followup' }
+// One of your requests to an agent and the steps it took for it (from its progress reports). Oldest first, last 20.
+export type AgentAsk = { title: string; at: number; steps: string[]; done: number[]; now?: number; nowText?: string; finishedAt?: number }
+type TaskItem = { id?: string; text: string; status: 'pending' | 'in_progress' | 'done' }
+// sessionId: a T3 helper's own session, when the mod knows it.
+export type Route = { runId: string; label: string; model?: string; kind: 'subagent' | 'delegated' | 'followup'; sessionId?: string }
 export type Ask = { at: number; text: string; routedTo: Route[]; answeredAt?: number }
 export type Helper = { name: string; isOn?: boolean; swarm?: boolean; model?: string; notes?: unknown[]; uses?: number }
 export type Snap = {
@@ -88,7 +92,7 @@ export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 export type Subscription = 'claude' | 'chatgpt'
 // The ChatGPT plan's limits, read by the server from Codex's logs. `at`: when Codex last reported them.
 export type CodexLimits = { plan: string | null; at: number; limits: { window: string; minutes: number | null; percentUsed: number; resetsAt: string | null }[] }
-export type MathModel = { model: string; requests: number; usd: number; parts: { label: string; tokens: number; rate: number | null; usd: number | null }[] }
+type MathModel = { model: string; requests: number; usd: number; parts: { label: string; tokens: number; rate: number | null; usd: number | null }[] }
 export type CostMath = { id: string; win?: string; usd: number; models?: MathModel[]; pace?: { last10: number }; cache?: { until?: number; rewriteUsd?: number; rereadUsd?: number } }
 export type McpRow = { server: string; calls: number; lastAt: number; tools: { name: string; n: number }[]; agents: unknown[] }
 export type Reaction = { id: string; score: number; label?: string; model?: string; kind?: string }

@@ -50,12 +50,19 @@ export async function runForThread($: $, threadId: string) {
   return list.find(r => r.childThreadId && r.childThreadId === threadId) ?? list.find(r => r.type === 'delegated' && r.label === threadId)
 }
 
-/** "Delegated task node:… (Title) finished": the parent's own row for that task is done too. */
+/**
+ * T3's notice that a helper's turn ended, e.g. "Delegated task node:<id> (Title) [completed]: …"
+ * (also [failed], [cancelled], …; older builds wrote "(Title) finished").
+ */
+export const DONE_NOTICE = /^Delegated task node:\S*\s*\((.+?)\)\s*\[?(finished|completed|failed|errored|cancell?ed|stopped|interrupted)\]?/i
+const OK_ENDINGS = /finished|completed/i
+
+/** A done notice: the parent's own row for that task is done too. */
 export async function noticeDone($: $, text: string) {
-  const m = /^Delegated task node:\S*\s*\((.+)\)\s*(finished|completed|failed|errored|cancell?ed|stopped)/i.exec(text)
+  const m = DONE_NOTICE.exec(text)
   if (!m?.[1]) return
   const title = m[1]
-  const failed = !/finished|completed/i.test(m[2] ?? '')
+  const failed = !OK_ENDINGS.test(m[2] ?? '')
   const run = (await getRuns($)).find(r => r.type === 'delegated' && r.now !== 'done' && r.label === title)
   if (!run) return
   if (failed) await patchRun($, run.id, r => ({ ...r, attention: 'failed' }))

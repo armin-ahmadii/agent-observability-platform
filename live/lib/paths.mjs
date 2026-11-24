@@ -1,5 +1,4 @@
 // Where the server reads and writes (see cli.mjs for the options).
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { options } from './cli.mjs'
 import { OWN_LIVE_DIR, resolveLiveDir } from './live-dir.mjs'
@@ -16,9 +15,7 @@ export const sessionPath = id => join(SESSIONS_DIR, `${id}.json`)
 export const MEMORY_DIR = livePath('memory')
 export const INBOX_PATH = livePath('inbox.jsonl')
 
-// Claude Code's transcripts, and T3 Code's database (for its chat names).
-export const PROJECTS_DIR = join(homedir(), '.claude', 'projects')
-export const T3_DB_PATH = join(homedir(), '.t3', 'userdata', 'statev2.sqlite')
+export { PROJECTS_DIR, T3_DB_PATH } from './home-paths.mjs'
 
 // Session ids come from query strings and file names: only letters, digits, "_" and "-".
 export const isId = id => /^[\w-]+$/.test(id)

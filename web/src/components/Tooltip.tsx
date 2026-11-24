@@ -47,7 +47,7 @@ function runAction(el: HTMLElement) {
 function hideTip() { clearTimeout(cardTimer); cardTimer = 0; cardOn = false; if (tip && !tip.hidden) { tip.removeAttribute('data-instant'); tip.hidden = true; hidAt = performance.now() } }
 function unhide() { if (!tip || !tip.hidden) return; tip.toggleAttribute('data-instant', performance.now() - hidAt < INSTANT_AFTER_MS); tip.hidden = false }
 const tipTarget = (el: Element | null) => el?.closest?.<HTMLElement>('[data-tip]') ?? null
-function showTip(el: Element | null) {
+function showTip(el: Element | null, x = mouse.x) {
   if (!tip) return
   const t = tipTarget(el)
   if (!t) return hideTip()
@@ -60,7 +60,7 @@ function showTip(el: Element | null) {
   tip.style.left = tip.style.top = '0px' // measure at its natural size
   const w = tip.offsetWidth, h = tip.offsetHeight
   const a = t.getBoundingClientRect()
-  tip.style.left = Math.max(EDGE, Math.min(innerWidth - w - EDGE, mouse.x - w / 2)) + 'px'
+  tip.style.left = Math.max(EDGE, Math.min(innerWidth - w - EDGE, x - w / 2)) + 'px'
   tip.style.top = (a.top - h - GAP < 4 ? a.bottom + GAP : a.top - h - GAP) + 'px'
 }
 // A card opens under its trigger and stays while the pointer is on the trigger or the card, so it can be scrolled.
@@ -111,8 +111,14 @@ export function Tooltip() {
     const offs = [
       on('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; hover(e.target as Element) }),
       on('mouseleave', () => { if (!cardOn || !focusHolds()) hideTip() }),
-      on('focusin', e => { const t = e.target as HTMLElement; if (t.dataset?.card) showCard(t) }),
+      on('focusin', e => {
+        const t = e.target as HTMLElement
+        if (t.dataset?.card) return showCard(t)
+        // A message ball reached with the keyboard shows its message, like hovering it.
+        if (t.matches?.('.ball[data-tip]:focus-visible')) { const r = t.getBoundingClientRect(); showTip(t, r.left + r.width / 2) }
+      }),
       on('focusout', e => {
+        if ((e.target as HTMLElement).matches?.('.ball[data-tip]') && !cardOn) hideTip()
         const next = e.relatedTarget
         if (!redrawing && cardOn && (e.target === cardEl || inTip(e.target)) && next !== cardEl && !inTip(next)) hideTip()
       }),

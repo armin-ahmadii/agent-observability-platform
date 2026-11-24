@@ -66,6 +66,8 @@ export type Run = {
   nowAt?: number
   /** What its handed-back result says it completed (Haiku, 3-6 imperative items, once per agent). */
   done?: string[]
+  /** The owner's requests this agent worked on, oldest first (last 20). Each owns its own steps; plan/planDone/planNow mirror the latest. */
+  asks?: Ask[]
   /** For a T3 delegated run: the child thread id, when the delegate_task result names it. */
   childThreadId?: string
 }
@@ -77,10 +79,22 @@ export type TriageJob = { what: string; at: number; ok: boolean }
 export type TaskItem = { id?: string; text: string; status: 'pending' | 'in_progress' | 'done' }
 
 /** Where a request went: a new subagent, a T3 delegated task, or a follow-up to an existing helper. */
-export type Route = { runId: string; label: string; model?: string; kind: 'subagent' | 'delegated' | 'followup' }
+/**
+ * Where a request went: a new subagent, a T3 delegated task, or a follow-up to an existing helper.
+ * `runId` is the row's id in this session's runs. `sessionId`: for a T3 helper, its own Claude
+ * session, once that session has started (filled in later for a new helper).
+ */
+export type Route = { runId: string; label: string; model?: string; kind: 'subagent' | 'delegated' | 'followup'; sessionId?: string }
 
 /** One real message you sent, and the agents it was routed to before the main turn ended. */
-export type Ask = { at: number; text: string; routedTo: Route[]; answeredAt?: number }
+export type RoutedAsk = { at: number; text: string; routedTo: Route[]; answeredAt?: number }
+
+/**
+ * One of the owner's requests an agent worked on, with its own steps (from the
+ * `progress` tool's `ask`, or, in a session's main chat, from the owner's message).
+ * `done` and `now` index into `steps`; `at` and `finishedAt` are ms since epoch.
+ */
+export type Ask = { title: string; at: number; steps: string[]; done: number[]; now?: number; nowText?: string; finishedAt?: number }
 
 export type ServerKind = 'design' | 'research' | 'build' | 'run'
 
@@ -99,6 +113,6 @@ export type Helper = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'subagent-deck': { runs: Shaped<Run[]>; helpers: Shaped<Helper[]>; asks: Shaped<Ask[]> }
+    'subagent-deck': { runs: Shaped<Run[]>; helpers: Shaped<Helper[]>; asks: Shaped<RoutedAsk[]> }
   }
 }

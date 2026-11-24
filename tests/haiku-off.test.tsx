@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { haikuSwitch } from '../hooks/state'
-import { answer, setup } from './harness'
+import { answer, callTool, setup } from './harness'
 
 test('SUBAGENT_DECK_HAIKU accepts off, 0, false and no in any case; anything else is on', () => {
   for (const v of ['off', 'OFF', ' Off ', '0', 'false', 'False', 'no', 'NO']) expect(haikuSwitch(v)).toBe(false)
@@ -17,8 +17,7 @@ test('with Haiku off, a busy session makes no model calls and keeps every row', 
     spawned: () => ({ model: 'claude-opus-5-5', agentId: `a${++n}` }),
     modelComplete: () => (modelCalls++, answer('Build: should not happen')),
   })
-  // One typed wrapper: spelling $.tool.call out at every line trips TypeScript's instantiation-depth limit.
-  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const call = (input: Record<string, unknown>) => callTool($, input)
   const progress = (input: Record<string, unknown>) => call({ tool: 'mcp__subagent-deck__progress', ...input })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })

@@ -4,15 +4,18 @@
 // events to the modules that do the work.
 import type { Register } from 'claude-code'
 
+import { finishLatestAsk } from './asks'
 import { checkMainAfterReload, mainTurnStarted, sawMain, settleBlindMain } from './blind-main'
 import { answerCommands, registerCommands } from './commands'
 import { queueDone } from './done-lists'
 import { gradeAgent } from './grades'
 import { HELPER_PREFIX, countUse, learnFrom, loadHelpers, withoutNotebook } from './helpers'
-import { drainInbox, publish } from './live'
+import { childSessionOf, drainInbox, fillRouteSessions, publish, publishNow, recordOwnThread } from './live'
+import { mainTurnEnded, noteOwnerMessage } from './owner-asks'
 import { PANE, PANE_TITLE, paneClockKey, registerPane } from './pane'
 import { planRun } from './plans'
 import { progressTool, registerProgressTool, reportProgress } from './progress'
+import { reattachThread, restoreAtStart, restoreIfReset } from './restore'
 import { RATE_BATCH_MS, noteMessage, rateBatch } from './reactions'
 import { TASK_TOOLS, addRun, answerAsk, ensureRun, newRun, recordTasks, refreshUsage, route } from './runs'
 import { loadRegistry, noteServerTool } from './servers'
@@ -32,9 +35,9 @@ import {
   updateAsks,
 } from './state'
 import { NOTICE, delegate, noticeDone, runForThread } from './t3'
-import { cleanAsk } from './text'
+import { cleanAsk, stripContext } from './text'
 import { activityOf, mark } from './timeline'
-import { followUp } from './titles'
+import { repairTitles } from './titles'
 
 /** How often the session snapshot is refreshed and published. */
 const TICK_MS = 2000
@@ -62,6 +65,11 @@ export const register: Register = on => {
       project: e.cwd.split('/').filter(Boolean).pop() ?? e.cwd,
     }
     session.live = live
+    // State that a compaction or a resume emptied comes back from the session file and transcript.
+    void restoreAtStart($, live)
+      .then(() => repairTitles($))
+      .catch(() => {})
+    void recordOwnThread($, live).catch(() => {})
     await checkMainAfterReload($)
     $.clock.every(RATE_BATCH_MS, () => {
       void rateBatch($).catch(() => {})
@@ -72,14 +80,18 @@ export const register: Register = on => {
     })
     $.clock.every(TICK_MS, () => {
       void (async () => {
-        const usage = await refreshUsage($)
+        const now = await $.clock.now()
+        await restoreIfReset($, live)
+        const usage = await refreshUsage($, undefined, now)
+        const runs = await getRuns($) // read once, after the refresh, for the steps below
         // The pane's time axis moves even when no run changed; redraw only when it would look different.
-        const clockKey = paneClockKey(await getRuns($), await $.clock.now())
+        const clockKey = paneClockKey(runs, now)
         if (clockKey !== lastClockKey) {
           lastClockKey = clockKey
           $.ui.invalidate('ui.render')
         }
-        await publish($, live, usage)
+        await fillRouteSessions($, now, runs)
+        await publish($, live, usage, { runs, now })
         await drainInbox($, live)
         await settleBlindMain($)
       })().catch(() => undefined)
@@ -98,7 +110,6 @@ export const register: Register = on => {
       const known = await findRun($, id)
       if (known) await mark($, id, 'thinking')
       await route($, { runId: id, label: known?.label ?? id, model: known?.model, kind: 'followup' })
-      followUp($, known, e.prompt)
       return next(e)
     }
 
@@ -155,15 +166,19 @@ export const register: Register = on => {
       await noteMessage($, at, e.text)
       session.lastPromptAt = at
       const text = cleanAsk(e.text)
-      if (NOTICE.test(text)) await noticeDone($, text).catch(() => {})
+      await restoreIfReset($, session.live)
+      // The whole message: T3's task ids alone run past the 160 characters cleanAsk keeps.
+      if (NOTICE.test(text)) await noticeDone($, stripContext(e.text).replace(/\s+/g, ' ').trim()).catch(() => {})
       else if (text) {
         await updateAsks($, list => [{ at, text, routedTo: [] }, ...list.filter(a => !NOTICE.test(a.text))].slice(0, 5))
+        publishNow($) // the page shows your message now, not on the next tick
         // The main conversation's planned steps come from the first message it sees;
         // later messages (in a T3 helper's session: t3_thread_send follow-ups) rename it.
         await ensureRun($, MAIN, e.text)
+        await noteOwnerMessage($, e.text, at)
         const main = await findRun($, MAIN)
-        if (main?.plan) followUp($, main, e.text)
-        else void planRun($, MAIN, e.text)
+        // Later messages add an ask (owner-asks.ts); they never rename the row.
+        if (!main?.plan) void planRun($, MAIN, e.text)
       }
     }
     return next(e)
@@ -201,6 +216,7 @@ export const register: Register = on => {
     if (T3_DELEGATE_TOOL.test(tool)) return delegate($, id, args, () => next(e))
 
     // A follow-up to a helper that already exists.
+    if (tool === 'SendMessage' || T3_THREAD_SEND_TOOL.test(tool)) await restoreIfReset($, session.live)
     if (tool === 'SendMessage') {
       const to = String(args.to ?? '').replace(/\s*\[[^\]]*\]$/, '')
       if (to && to !== MAIN) {
@@ -208,14 +224,16 @@ export const register: Register = on => {
         const info = (await $.agent.list()).find(a => a.id === to || a.name === to)
         const run = list.find(r => r.id === (info?.id ?? to)) ?? list.find(r => r.helper === to || r.savedAs === to || r.label === to)
         await route($, { runId: run?.id ?? to, label: run?.label ?? to, model: run?.model, kind: 'followup' })
-        followUp($, run, String(args.message ?? ''))
       }
     }
     if (T3_THREAD_SEND_TOOL.test(tool)) {
       const threadId = String(args.threadId ?? '')
+      await reattachThread($, threadId) // a helper this session started before its rows were lost
       const run = await runForThread($, threadId)
-      if (threadId) await route($, { runId: run?.id ?? threadId, label: run?.label ?? threadId, model: run?.model, kind: 'followup' })
-      followUp($, run, String(args.message ?? ''))
+      const sessionId = await childSessionOf($, threadId)
+      if (threadId) {
+        await route($, { runId: run?.id ?? threadId, label: run?.label ?? threadId, model: run?.model, kind: 'followup', ...(sessionId ? { sessionId } : {}) })
+      }
     }
     if (TASK_TOOLS.test(tool)) {
       const out = await next(e)
@@ -237,7 +255,9 @@ export const register: Register = on => {
         queueDone($, { key: `main:${session.live.id}`, label: 'Main conversation', brief: main.brief, result: answer.slice(0, ANSWER_CHARS), runId: MAIN })
       }
       await mark($, MAIN, 'done')
-      await answerAsk($, await $.clock.now())
+      const endedAt = await $.clock.now()
+      await mainTurnEnded($, endedAt)
+      await answerAsk($, endedAt)
       await refreshUsage($, MAIN)
       $.ui.invalidate('ui.render')
     }
@@ -255,6 +275,8 @@ export const register: Register = on => {
         void gradeAgent($, { id, label: run.label, brief: run.brief, result, usd: run.usd, ms: (await $.clock.now()) - run.startedAt })
       }
       await mark($, id, 'done')
+      const endedAt = await $.clock.now()
+      await patchRun($, id, r => finishLatestAsk(r, endedAt))
       await refreshUsage($, id)
       $.ui.invalidate('ui.render')
       if (run?.helper) await learnFrom($, run.helper, answer)

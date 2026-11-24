@@ -10,13 +10,15 @@ import { costMath } from './lib/cost.mjs'
 import { finishedAgents, warmLongTimeframes } from './lib/finished-agents.mjs'
 import { sessionHistory, sessionMcp } from './lib/history.mjs'
 import { readJsonBody, send, sendJson, sendJsonOr, sendStore } from './lib/http.mjs'
-import { MAX_BODY_BYTES, refusal } from './lib/guard.mjs'
+import { MAX_BODY_BYTES, refusal, upgradeRefusal } from './lib/guard.mjs'
 import { handleAction } from './lib/inbox.mjs'
 import { backfill, EMPTY_MEMORY, readMemory, recordVote } from './lib/memory.mjs'
 import { isId, PAGE_PATH, PORT, SESSIONS_DIR } from './lib/paths.mjs'
 import { setResolved, trimResolved } from './lib/resolved.mjs'
-import { deleteOldSessionFiles, hiddenVersion, isHidden, trimHidden, listSessions, rateLimits, rateLimitsAt, readSessionFile, setHidden } from './lib/sessions.mjs'
+import { deleteOldSessionFiles, forgetSessionLists, hiddenVersion, isHidden, trimHidden, listSessions, rateLimits, rateLimitsAt, readSessionFile, setHidden } from './lib/sessions.mjs'
 import { codexLimits } from './lib/codex-limits.mjs'
+import { createStreamHandler } from './lib/stream.mjs'
+import { refuseUpgrade } from './lib/websocket.mjs'
 import { HOUR, SECOND } from './lib/time.mjs'
 import { refreshUsage } from './lib/usage-store.mjs'
 
@@ -39,6 +41,31 @@ setInterval(refreshUsage, USAGE_REFRESH_MS)
 
 const param = (url, name) => url.searchParams.get(name)
 
+// Live change notices for open pages (WebSocket /api/ws). A changed file also drops the cached session lists and
+// snapshots, so the refetch it triggers sees the new data at once.
+// Several open pages refetch on the same change notice. Their shared answers (the session list, the All snapshot)
+// are built, serialised and compressed once: reused for SHARED_ANSWER_MS, and dropped as soon as a session file
+// changes or the page posts something (hide, resolve, vote…).
+const SHARED_ANSWER_MS = 200
+const shared = new Map() // key -> { at, value }
+function sharedAnswer(key, build) {
+  const hit = shared.get(key)
+  if (hit && Date.now() - hit.at < SHARED_ANSWER_MS) return hit.value
+  const value = build()
+  shared.set(key, { at: Date.now(), value })
+  return value
+}
+const forgetShared = () => shared.clear()
+
+const stream = createStreamHandler({
+  onChanged: () => { forgetSessionLists(); forgetShared() },
+  related: id => {
+    const list = listSessions()
+    const parent = list.find(s => s.id === id)?.parentId
+    return list.filter(s => s.parentId === id || s.id === parent).map(s => s.id)
+  },
+})
+
 // Finished agents without hidden sessions' ones. The same array is returned until either changes, so its large
 // JSON (30 days can be megabytes) is built, hashed and gzipped once, and unchanged polls get 304.
 const visibleCache = new Map() // ms -> { rows, hidden, list }
@@ -56,10 +83,13 @@ const codexLimitsSafe = () => { try { return codexLimits() } catch { return null
 
 const routes = {
   // limitsAt: when Claude's limits were last reported. codexLimits: the ChatGPT plan's, from Codex's logs (null without them).
-  '/api/sessions': (res) => sendJson(res, { sessions: listSessions(), limits: rateLimits(), limitsAt: rateLimitsAt(), codexLimits: codexLimitsSafe() }),
+  '/api/sessions': (res) => sendJson(res, sharedAnswer('sessions', () => ({ sessions: listSessions(), limits: rateLimits(), limitsAt: rateLimitsAt(), codexLimits: codexLimitsSafe() }))),
 
   '/api/session': (res, url) => {
-    if (param(url, 'id') === 'all') return sendJson(res, allSessions(knownWin(param(url, 'win')), activeSessionIds(url)))
+    if (param(url, 'id') === 'all') {
+      const win = knownWin(param(url, 'win')), only = activeSessionIds(url)
+      return sendJson(res, sharedAnswer(`all|${win}|${[...only].sort()}`, () => allSessions(win, only)))
+    }
     const id = param(url, 'id') ?? listSessions()[0]?.id
     if (!id || !isId(id)) return send(res, 200, 'application/json', 'null')
     sendJsonOr(res, 'null', () => readSessionFile(id))
@@ -187,12 +217,24 @@ const server = createServer(async (req, res) => {
         return send(res, e.status ?? 400, 'text/plain', '')
       }
       await post(res, url, body)
+      forgetShared()
     } else if (routes[url.pathname]) routes[url.pathname](res, url)
     else sendPage(res)
   } catch (error) {
     console.error(error)
     if (!res.headersSent) send(res, 500, 'text/plain', '')
   }
+})
+
+// WebSocket upgrades: only /api/ws?id=<sessionId|all>, with the same Host and Origin checks as other requests.
+server.on('upgrade', (req, socket) => {
+  socket.on('error', () => {})
+  const refused = upgradeRefusal(req, PORT)
+  if (refused) return refuseUpgrade(socket, refused.status, refused.reason)
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const id = url.searchParams.get('id') ?? 'all'
+  if (url.pathname !== '/api/ws' || (id !== 'all' && !isId(id))) return refuseUpgrade(socket, 404, 'Not Found')
+  stream.upgrade(req, socket, id)
 })
 
 // Exits non-zero so a supervisor notices; launchd waits its throttle interval (10 s by default) before retrying.

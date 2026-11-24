@@ -7,7 +7,7 @@ import type { Run, Snap, Win } from './types'
 // A T3 delegated task runs as its own session: find it by title and show its live state and cost.
 function linkTask(r: Run): Run {
   if (r.type !== 'delegated') return r
-  const s = deck.taskSession(r.label)
+  const s = (r.session && deck.sessions.find(x => x.id === r.session)) || deck.taskSession(r.label)
   // No session of its own (helpers on other providers never load the mod): the server's state decides,
   // which it corrects from T3's run records once the helper finished.
   if (!s) return r.now === 'done' ? r : { ...r, now: 'running' }
@@ -30,6 +30,7 @@ function linkTask(r: Run): Run {
       nowAt: c.nowAt, nowText: c.nowText ?? (c.nowAt && typeof c.now === 'string' && !isStateWord(c.now) ? c.now : undefined),
       planDone: ownPlan ? c.planDone : r.planDone, planSource: ownPlan ? c.planSource : r.planSource, planNow: ownPlan ? c.planNow : r.planNow, short: c.short || r.short,
       segments: c.segments ?? [], mcp: c.mcp ?? {}, tokens: c.tokens ?? 0, model: c.model ?? r.model, effort: c.effort ?? r.effort,
+      asks: c.asks?.length ? c.asks : r.asks,
       tasks: c.tasks?.length ? c.tasks : r.tasks, done: c.done?.length ? c.done : r.done, tasksAt: c.tasks?.length ? c.tasksAt : r.tasksAt,
       plan: ownPlan ? c.plan : r.plan, startedAt: Math.min(r.startedAt ?? Infinity, c.startedAt ?? Infinity),
     } : {}),
@@ -43,12 +44,29 @@ function withoutResolved(r: Run): Run {
   return deck.resolving.has(sessionId + ':' + runId) ? { ...r, attention: undefined } : r
 }
 
+// All sessions: an open T3 helper its chat has no row for (the chat's mod reloaded and lost its delegated runs) gets
+// one, linked to its session by id. So a chat between turns whose helpers still work stays active, helpers shown.
+function helperRows(snap: Snap, runs: Run[]): Run[] {
+  if (snap.sessionId !== 'all' || !snap.helperMains) return []
+  const linked = new Set(runs.filter(r => r.type === 'delegated' && r.session).map(r => r.session))
+  const out: Run[] = []
+  for (const id of Object.keys(snap.helperMains)) {
+    const s = deck.sessions.find(x => x.id === id)
+    if (linked.has(id) || !s?.parentId || !runs.some(r => r.id === `${s.parentId}:main`)) continue
+    out.push(linkTask({ id: `${s.parentId}:helper:${id}`, type: 'delegated', parentId: `${s.parentId}:main`, sessionOf: s.parentId, label: s.rawTitle || s.title || 'Helper', session: id, startedAt: s.startedAt }))
+  }
+  return out
+}
+
 // `snap` is the session data the sections draw from (the last good one while the page fades it out).
 export type Model = { snap: Snap; runs: Run[]; tree: Run[]; triage?: Run; kids: Map<string, Run[]>; roots: Run[] }
 export function buildModel(snap: Snap): Model {
   const byId = new Map<string, Run>()
-  for (const r of snap.runs ?? []) byId.set(r.id, linkTask(withoutResolved(r))) // the same id can appear twice; keep one
+  // All sessions groups chats under a row per folder only when Settings → Folders is on; off, every chat is a top row.
+  const folders = deck.prefs.folders
+  for (const r of snap.runs ?? []) if (folders || r.type !== 'project') byId.set(r.id, linkTask(withoutResolved(r))) // the same id can appear twice; keep one
   const runs = [...byId.values()]
+  runs.push(...helperRows(snap, runs))
   const triage = runs.find(r => r.id === 'triage' || r.type === 'triage')
   const tree = runs.filter(r => r !== triage)
   const hasMain = byId.has('main')

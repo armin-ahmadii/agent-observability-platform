@@ -8,7 +8,7 @@ export function onRowClick(e: React.MouseEvent) {
   if (save) return deck.save(save.dataset.save!)
   const resolve = t.closest<HTMLElement>('[data-resolve]')
   if (resolve) return deck.resolve(resolve.dataset.resolveSession!, resolve.dataset.resolve!)
-  if (t.closest('.act') || t.closest('[data-vote]')) return
+  if (t.closest('.act') || t.closest('[data-vote]') || t.closest('.ball')) return
   const view = t.closest<HTMLElement>('[data-view]')
   if (view) return deck.view(view.dataset.view!)
   const more = t.closest<HTMLElement>('[data-more]')

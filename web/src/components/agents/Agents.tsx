@@ -11,6 +11,8 @@ import type { Run } from '../../lib/types'
 import { chatRowItems, chatRun, earlierRowItems, liveRowItems, triageRowItems } from './rowItems'
 import { onRowClick, onRowKey } from './rowEvents'
 import { useReveal } from './useReveal'
+import { ShowMore } from '../common'
+import { MEM_TOP } from '../ProjectMemory'
 
 // A folded "Earlier agents" list with its own toggle.
 function EarlierToggle({ open, n, onToggle }: { open: boolean; n: number; onToggle: (e: React.MouseEvent) => void }) {
@@ -48,7 +50,9 @@ export function Agents({ m, mainUsd, showAgents, showChats }: { m: Model; mainUs
   if (isAll) deck.activeIds = [...v.active]
   const idle = isAll && deck.win !== 'active' && deck.chats?.win === deck.win ? deck.chats.rows.filter(c => !v.active.has(c.id)) : []
   const prevShown = isAll && showChats && idle.length > 0
-  const chatItems = prevShown ? chatRowItems(idle, id => pastBy.get(id)?.length ?? 0, earlierFor) : []
+  // The first few, the rest behind "+N more" (like Project memory; remembered for this tab).
+  const prevMore = !!deck.memMore.chats
+  const chatItems = prevShown ? chatRowItems(prevMore ? idle : idle.slice(0, MEM_TOP), id => pastBy.get(id)?.length ?? 0, earlierFor) : []
 
   useReveal(m, v, past, showAgents)
 
@@ -84,6 +88,7 @@ export function Agents({ m, mainUsd, showAgents, showChats }: { m: Model; mainUs
       <section className="sec" id="sec-chats">
         <div className="head"><h2>Previous orchestrators <em>{idle.length}</em></h2>{colHeads}</div>
         <div className="rows" id="chats" onClick={onRowClick} onKeyDown={onRowKey}><Rows key={sid}>{chatItems}</Rows></div>
+        <ShowMore open={prevMore} hiddenCount={idle.length - MEM_TOP} hidden={idle.length <= MEM_TOP} onToggle={() => deck.toggleMemMore('chats')} />
       </section>
     )}</Appear>
   </>

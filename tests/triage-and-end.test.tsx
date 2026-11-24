@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { answer, setup } from './harness'
+import { answer, callTool, setup } from './harness'
 
 test('background helper logs its jobs; a missed turn end and a T3 notice still finish rows', async ($, on) => {
   const { clock, snapshot } = setup(on, {
@@ -24,7 +24,7 @@ test('background helper logs its jobs; a missed turn end and a T3 notice still f
 
   // The main turn is running when the module reloads: the new copy never hears its end.
   await $.prompt.submit({ text: 'Please build the totals view for the page', wait: false } as never)
-  await $.tool.call({ tool: 'Read', file_path: '/x/a.ts' } as never)
+  await callTool($, { tool: 'Read', file_path: '/x/a.ts' })
   await clock.advance(2000)
   expect(runs().find(r => r.id === 'main')!.now).not.toBe('done')
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
@@ -34,7 +34,7 @@ test('background helper logs its jobs; a missed turn end and a T3 notice still f
   expect(runs().find(r => r.id === 'main')!.now).toBe('done')
 
   // A T3 "finished" notice closes the parent's row for that task.
-  await $.tool.call({ tool: 'mcp__t3-code__delegate_task', title: 'Plan: agent self-reporting', task: 'Make agents report progress' } as never)
+  await callTool($, { tool: 'mcp__t3-code__delegate_task', title: 'Plan: agent self-reporting', task: 'Make agents report progress' })
   await clock.advance(2000)
   expect(runs().find(r => r.type === 'delegated')!.now).toBe('running')
   await $.prompt.submit({ text: 'Delegated task node:delegated-task:command%3Amcp%3Aabc (Plan: agent self-reporting) finished', wait: false } as never)

@@ -5,6 +5,7 @@
 // reload we watch the main loop instead: no step or tool call for IDLE_MS
 // means its turn is over.
 import { MAIN, type $, findRun } from './state'
+import { mainTurnEnded } from './owner-asks'
 import { answerAsk } from './runs'
 import { mark } from './timeline'
 
@@ -40,6 +41,7 @@ export async function settleBlindMain($: $) {
   const main = await findRun($, MAIN)
   if (!main || main.now === 'done') return
   await mark($, MAIN, 'done')
+  await mainTurnEnded($, at)
   await answerAsk($, at)
   $.ui.invalidate('ui.render')
 }

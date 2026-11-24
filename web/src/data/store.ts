@@ -6,20 +6,32 @@ import { readJSON, writeJSON, readSession, writeSession } from './storage'
 import { localId } from '../lib/ids'
 import { WINS, type Chat, type CodexLimits, type Subscription, type CostMath, type DoneEntry, type Grade, type Limit, type McpRow, type Memory, type Run, type Session, type Snap, type Win } from '../lib/types'
 
-export type Prefs = { stats: boolean; agents: boolean; tasks: boolean; chats: boolean; mcp: boolean; memory: boolean }
-export const PREF_LABELS: [keyof Prefs, string][] = [
-  ['stats', 'Cost & tokens'], ['agents', 'Agents'], ['tasks', 'Tasks'], ['chats', 'Previous orchestrators'], ['mcp', 'MCP servers'], ['memory', 'Project memory'],
+type Prefs = { stats: boolean; agents: boolean; tasks: boolean; chats: boolean; mcp: boolean; memory: boolean; msgAnim: boolean; folders: boolean }
+// The settings menu, in groups: sections shown on the page, then how the agent list behaves. (Light mode follows, apart.)
+export const PREF_GROUPS: [keyof Prefs, string][][] = [
+  [['stats', 'Cost & tokens'], ['agents', 'Agents'], ['tasks', 'Tasks'], ['chats', 'Previous orchestrators'], ['mcp', 'MCP servers'], ['memory', 'Project memory']],
+  [['folders', 'Folders'], ['msgAnim', 'Message animation']],
 ]
-const defaultPrefs: Prefs = { stats: true, agents: true, tasks: true, chats: true, mcp: true, memory: true }
+const defaultPrefs: Prefs = { stats: true, agents: true, tasks: true, chats: true, mcp: true, memory: true, msgAnim: true, folders: false }
 
 // Browser storage keys. Session storage is per tab; prefs are remembered everywhere.
 const KEY = {
-  open: 'deck-open', detail: 'deck-detail', hist: 'deck-hist', asks: 'deck-asks', win: 'deck-win',
+  open: 'deck-open', hist: 'deck-hist', asks: 'deck-asks', win: 'deck-win',
   memOpen: 'deck-mem-open', memMore: 'deck-mem-more', prefs: 'deck-show', ring: 'deck-ring',
 }
 
 const POLL_MS = 1500
 const HIDDEN_POLL_MS = 15_000 // while the page isn't visible (a hidden tab or a collapsed side panel)
+// While the live socket (/api/ws) is up, a change notice refetches at once; the poll is only a safety net.
+// A WebSocket, not a server-sent event stream: many dashboard tabs in one browser would otherwise use up its
+// few connections per server and leave every fetch waiting.
+const SOCKET_POLL_MS = 5000
+const SOCKET_RETRY_MIN_MS = 2000 // a closed socket (or a server without one) is tried again after this, doubling
+const SOCKET_RETRY_MAX_MS = 30_000
+// Change notices come in bursts (All sessions hears every chat): the first one after a quiet spell refetches at once,
+// then at most one refetch per gap.
+const CHANGE_GAP_MS = 300
+const CHANGE_GAP_ALL_MS = 1000
 const SIDE_DATA_MS = 10_000 // math, history, MCP and memory refresh at most this often
 const LONG_HISTORY_MS = 60_000 // All sessions' 7d/30d Earlier agents (megabytes): at most this often
 // A session's data is fetched again only when its file changed (its updatedAt in /api/sessions), or after this long
@@ -53,13 +65,14 @@ class Deck {
   viewChild: string | null = null // a helper session opened with "View details" (kept in memory, never in the address)
   loadingFor: string | null = 'first' // the session being switched to, while its data loads
   openState: Record<string, boolean> = readJSON('session', KEY.open, {})
-  detailState: Record<string, boolean> = readJSON('session', KEY.detail, {})
+  detailState: Record<string, boolean> = {} // rows you opened: every row starts closed on each page load, and only a click opens one
   briefOpen = new Set<string>()
+  askOpen = new Map<string, boolean>() // an ask you opened or closed (all start closed)
   saving = new Map<string, number>() // run id → time pressed
   toggling = new Map<string, { on: boolean; at: number }>() // helper name → wanted state
   histOpen = readSession(KEY.hist) === '1'
   asksOpen = readSession(KEY.asks) === '1' // Tasks: the requests past the first few
-  revealing: string | null = null // an agent row to scroll to and open (from Tasks)
+  revealing: string | null = null // an agent row to scroll to (from Tasks)
   memOpen = new Set<string>(readJSON<string[]>('session', KEY.memOpen, []))
   memMore: Record<string, boolean> = readJSON('session', KEY.memMore, {})
   menuOpen = false
@@ -113,17 +126,78 @@ class Deck {
   private historyAt = new Map<string, number>() // history key → when fetched
   // Polls can overlap (the 1.5s loop, a session switch, a hash change): only the newest one's answers are used.
   private pollSeq = 0
+  // One fetch at a time for the loop and change notices: a notice during a fetch runs one more right after.
+  private polling: Promise<void> | null = null
+  private pollAgain = false
+  refresh(): Promise<void> {
+    if (this.polling) { this.pollAgain = true; return this.polling }
+    this.polling = this.poll().finally(() => {
+      this.polling = null
+      if (this.pollAgain) { this.pollAgain = false; this.refresh() }
+    })
+    return this.polling
+  }
+
+  // ----- live socket -----
+  socketUp = false
+  private socket: WebSocket | null = null
+  private socketView = ''
+  private socketRetryAt = 0
+  private socketRetryMs = SOCKET_RETRY_MIN_MS
+  // Listen for changes to the shown view (a session id, or "all"); reconnects when the view changes.
+  // Messages: {"type":"change","ids":[...changed session ids]}.
+  private watch(view: string) {
+    if (document.hidden || typeof WebSocket === 'undefined') return this.unwatch()
+    if (this.socket && this.socketView === view) return
+    this.unwatch()
+    if (Date.now() < this.socketRetryAt) return
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?id=${encodeURIComponent(view)}`)
+    this.socket = ws
+    this.socketView = view
+    ws.onopen = () => { this.socketUp = true; this.socketRetryMs = SOCKET_RETRY_MIN_MS }
+    ws.onmessage = e => { try { if (JSON.parse(String(e.data))?.type === 'change') this.onChange() } catch {} }
+    ws.onclose = () => {
+      if (this.socket !== ws) return // closed on purpose (view change, page hidden)
+      this.socket = null
+      this.socketView = ''
+      this.socketUp = false
+      this.socketRetryAt = Date.now() + this.socketRetryMs
+      this.socketRetryMs = Math.min(SOCKET_RETRY_MAX_MS, this.socketRetryMs * 2)
+    }
+  }
+  private lastChangeFetch = 0
+  private changeTimer = 0
+  private onChange() {
+    if (this.changeTimer) return
+    const wait = this.lastChangeFetch + (this.socketView === 'all' ? CHANGE_GAP_ALL_MS : CHANGE_GAP_MS) - Date.now()
+    const go = () => { this.changeTimer = 0; this.lastChangeFetch = Date.now(); this.refresh() }
+    if (wait <= 0) go()
+    else this.changeTimer = window.setTimeout(go, wait)
+  }
+  private unwatch() {
+    const ws = this.socket
+    this.socket = null
+    this.socketView = ''
+    this.socketUp = false
+    ws?.close()
+  }
+
+
   async poll() {
     const seq = ++this.pollSeq
     const stale = () => seq !== this.pollSeq
     try {
       const list = await api.sessions()
       if (stale()) return
-      const every: (Session & { hidden?: boolean })[] = Array.isArray(list) ? list : list?.sessions ?? []
+      let every: (Session & { hidden?: boolean })[] = Array.isArray(list) ? list : list?.sessions ?? []
       this.limits = list?.limits ?? []
       this.limitsAt = list?.limitsAt ?? null
       this.codexLimits = list?.codexLimits ?? null
       // Hidden sessions leave the menu and the lists, but still count in the All row's spend and weekly share.
+      // A chat counts as working while its T3 helpers do, even between its own turns.
+      const helpersWorking = new Map<string, number>()
+      for (const s of every) if (s.parentId && s.isLive && s.working) helpersWorking.set(s.parentId, (helpersWorking.get(s.parentId) ?? 0) + s.working)
+      if (helpersWorking.size) every = every.map(s => helpersWorking.has(s.id) ? { ...s, working: (s.working ?? 0) + helpersWorking.get(s.id)! } : s)
       const sessions: Session[] = every.filter(s => !s.hidden && !this.hiding.has(s.id))
       if (this.chosen && this.chosen !== 'all' && every.some(s => s.id === this.chosen) && !sessions.some(s => s.id === this.chosen)) { this.chosen = 'all'; history.replaceState(null, '', '#all') }
       sessions.unshift(allSessionsRow(every))
@@ -138,6 +212,7 @@ class Deck {
       const snapKey = 'snap:' + (pick?.id ?? '') + w
       const stamp = pick?.id === 'all' ? Math.max(0, ...every.map(s => s.updatedAt || 0)) : pick?.updatedAt ?? 0
       const reuse = !!pick && this.snap?.sessionId === pick.id && this.isFresh(snapKey, stamp)
+      if (pick) this.watch(pick.id)
       const fresh = reuse ? this.snap : pick ? await api.session(pick.id, w) : null
       if (pick && !reuse) this.noteFetched(snapKey, stamp)
       // A newer poll, or a timeframe switch while this was loading: drop this answer.
@@ -192,13 +267,13 @@ class Deck {
     let timer = 0
     const loop = async () => {
       clearTimeout(timer)
-      await this.poll()
+      await this.refresh()
       clearTimeout(timer)
-      timer = window.setTimeout(loop, document.hidden ? HIDDEN_POLL_MS : POLL_MS)
+      timer = window.setTimeout(loop, document.hidden ? HIDDEN_POLL_MS : this.socketUp ? SOCKET_POLL_MS : POLL_MS)
     }
     loop()
-    // Shown again: refresh now and go back to the fast pace.
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) loop() })
+    // Hidden: drop the socket. Shown again: refresh now and go back to the fast pace (the socket reconnects).
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.unwatch(); else loop() })
     addEventListener('hashchange', () => { this.chosen = location.hash.slice(1) || null; this.poll() })
   }
 
@@ -214,7 +289,8 @@ class Deck {
   // ----- actions -----
   post(body: Record<string, unknown>) { if (this.snap) api.action(this.snap.sessionId, body) }
   openKey = (id: string) => (this.snap?.sessionId ?? '') + ':' + id
-  isOpen = (id: string) => this.openState[this.openKey(id)] ?? (id === 'main' || String(id).startsWith('project:'))
+  // Main conversations (each chat's, in All sessions) and projects start unfolded, so their working agents show.
+  isOpen = (id: string) => this.openState[this.openKey(id)] ?? (id === 'main' || String(id).endsWith(':main') || String(id).startsWith('project:'))
   detailOpen = (id: string) => !!this.detailState[this.openKey(id)]
   setMenu(open: boolean) { if (this.menuOpen !== open) { this.menuOpen = open; this.render() } }
   setSettings(open: boolean) { if (this.settingsOpen !== open) { this.settingsOpen = open; this.render() } }
@@ -254,9 +330,9 @@ class Deck {
   }
   toggleDetail(id: string) {
     this.detailState[this.openKey(id)] = !this.detailOpen(id)
-    writeJSON('session', KEY.detail, this.detailState)
     this.render()
   }
+  toggleAsk(key: string, wasOpen: boolean) { this.askOpen.set(key, !wasOpen); this.render() }
   toggleBrief(id: string) { this.briefOpen.has(id) ? this.briefOpen.delete(id) : this.briefOpen.add(id); this.render() }
   save(id: string) { this.saving.set(id, Date.now()); this.post({ kind: 'save', id }); this.render() }
   // Clear an agent's needs-attention marker (dashboard only). It then leaves Agents like any finished agent.
@@ -284,10 +360,8 @@ class Deck {
     this.poll()
   }
   toggleAsks() { this.asksOpen = !this.asksOpen; writeSession(KEY.asks, this.asksOpen ? '1' : '0'); this.render() }
-  // Open an agent's breakdown and scroll to its row; Agents finds the row (unfolding parents or Earlier agents) after paint.
+  // Scroll to an agent's row (it is not opened: only a click on a row opens it); Agents finds the row (unfolding parents or Earlier agents) after paint.
   reveal(id: string) {
-    this.detailState[this.openKey(id)] = true
-    writeJSON('session', KEY.detail, this.detailState)
     this.revealing = id
     this.render()
   }

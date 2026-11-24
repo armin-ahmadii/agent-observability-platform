@@ -1,6 +1,6 @@
 // MCP server names, colours and icons.
 import { deck } from '../data/store'
-import { darkQuery } from './theme'
+import { isDark } from './theme'
 
 const BRANDS = ['figma', 'github', 'notion', 'linear', 'google', 'chrome'] as const
 export const serverLabel = (name: string) => deck.snap?.servers?.[name]?.label ?? name
@@ -18,7 +18,7 @@ export function serverColor(name: string) {
   }
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-  if (darkQuery.matches ? lum < TOO_DARK : lum > TOO_LIGHT) return 'var(--fg)'
+  if (isDark() ? lum < TOO_DARK : lum > TOO_LIGHT) return 'var(--fg)'
   return hex
 }
 

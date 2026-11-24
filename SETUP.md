@@ -274,15 +274,16 @@ otherwise pick another port (`node live/server.mjs --port 4795`) and use that po
 The page shows each helper's steps ticking off only when the helper reports them with the `progress` tool that the
 mod adds (its full name is `mcp__subagent-deck__progress`). Helpers do that only when told to. (Without
 it, the page shows only steps guessed by [the Haiku background helper](#the-haiku-background-helper), which never
-tick, or no steps if that helper is off.)
+tick, or no steps if that helper is off.) With `ask`, the page groups the steps under each request the
+helper worked on; steps sent without it go under the helper's own name.
 
 **ASK** the human before editing `~/.claude/CLAUDE.md`. Append (do not replace anything) this block:
 
 ```markdown
 # Agent progress (subagent-deck)
 
-- In every brief you give a subagent or helper, tell it to report progress with the `progress` tool: its steps at the start, then each step it starts and finishes, so the dashboard shows it live.
-- When you are a subagent or helper and the `progress` tool is available, call it with your steps at the start, then each time you start or finish a step.
+- In every brief you give a subagent or helper, tell it to report progress with the `progress` tool: the request it is working on (`ask`) and its steps at the start, then each step it starts and finishes, so the dashboard shows it live.
+- When you are a subagent or helper and the `progress` tool is available, call it at the start with `ask` (the owner's request in 5–7 words, in their terms, e.g. "Add resolve button to failed rows") and your steps, then each time you start or finish a step. Send `ask` again only when you start on a different request.
 ```
 
 Optional, only if the human wants the page to open at the start of each session. Pick the line that fits their
@@ -392,7 +393,7 @@ Set it up (**ASK** first; back up `~/.codex/config.toml` before editing it):
    ```markdown
    # Progress
 
-   - In every task, report progress with the `progress` tool (your steps at the start, then each step you start and finish) so the dashboard shows it live.
+   - In every task, report progress with the `progress` tool so the dashboard shows it live: at the start, `ask` (the request in 5–7 words, e.g. "Add resolve button to failed rows") and your steps; then each step you start and finish. Send `ask` again only when you start on a different request.
    ```
 
 3. Check: from a Claude Code session in T3 Code, delegate a small task to a Codex model and ask it to report
@@ -405,7 +406,8 @@ Read this section to the human in plain words, then ask the one-line question at
 
 **What it is for.** In each Claude Code session, the mod runs a small, cheap model (`claude-haiku-5-5`) in the
 background to make the dashboard easier to read. It:
-- gives each row a short title (for example "Build: timeline lanes UI"), and a new one after a follow-up;
+- gives each row a short title (for example "Build: timeline lanes UI");
+- names each request the human sends in the main chat, in 5–7 words;
 - guesses a step list for an agent until the agent reports its real steps;
 - writes a short "what it did" list and a grade for each finished agent (grades suggest which agents are worth
   saving as helpers);
@@ -433,7 +435,8 @@ The server does not need this variable.
 **What turns off:**
 - Short titles. Rows show the agent's own label instead: its description, the delegated task title, or
   "Main conversation".
-- New titles after follow-ups.
+- Short names for your requests in the main chat. Each request is titled with its first 7 words instead, and
+  messages under 4 words (like "ok" or "thanks") don't become a request.
 - Guessed steps. Steps only show if the agent reports them with `progress` or keeps a to-do list.
 - "What it did" lists.
 - Grades, so no "worth saving" suggestions.
@@ -446,7 +449,7 @@ The server does not need this variable.
 - One row per agent, with parent and child links.
 - What each agent is doing now, and its timeline.
 - Cost, tokens, model, effort, context use, cache expiry and status, from Claude Code's own records.
-- Steps and the "now" line from the `progress` tool and from to-do lists.
+- Steps and the "now" line from the `progress` tool and from to-do lists, grouped under each request (`ask`).
 - Each agent's result.
 - Message routing (which agent each message went to).
 - Finishing delegated rows when T3 Code says they are done.

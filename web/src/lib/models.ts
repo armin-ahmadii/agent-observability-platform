@@ -1,6 +1,6 @@
 import type { IconName } from '../icons/svgs'
 // Model: provider logo, short name ("Opus 5.5", "GPT-5.1 Codex"), and its brand color.
-export type LogoIcon = IconName | 'app_muse'
+type LogoIcon = IconName | 'app_muse'
 const PROVIDERS: [RegExp, LogoIcon, string][] = [
   [/claude|opus|sonnet|haiku|fable/i, 'm_claude', '#d97757'],
   [/gpt|codex|openai|\bo\d/i, 'm_openai', 'light'],

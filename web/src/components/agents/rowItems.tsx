@@ -46,7 +46,7 @@ export function liveRowItems({ m, v, isAll, now, mainUsd, earlierFor }: {
           : <Logo r={r} />}
       </div>}
       mid={<>
-        <ModelName model={r.model} col /><TitleNote r={r} note={note} />{cnt ? <Count n={r.type === 'project' ? kidsShown.length : cnt} /> : null}<StepRing r={r} /><Marks r={r} />
+        {r.type === 'project' ? null : <ModelName model={r.model} col />}<TitleNote r={r} note={note} />{cnt ? <Count n={r.type === 'project' ? kidsShown.length : cnt} /> : null}<StepRing r={r} /><Marks r={r} />
         {!isMainRow(r) && r.type !== 'project' && !working ? <RowAction r={r} /> : null}
       </>}
       tokens={r.type === 'delegated' && !r.tokens ? '—' : tok(r.tokens ?? 0)}

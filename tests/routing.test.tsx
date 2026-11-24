@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { answer, setup } from './harness'
+import { answer, callTool, setup } from './harness'
 
 const THREAD = 'thread:delegated-task:command%3Amcp%3A00000000-0000-0000-0000-000000000000%3Adelegate-task%3A00000000'
 
@@ -22,14 +22,14 @@ test('a message records where it was routed, and agents keep task lists and plan
   await $.prompt.submit({ text: 'Please add routing data to the mod <system-reminder>secret</system-reminder>', wait: false } as never)
   await $.prompt.submit({ text: 'Delegated task node:delegated-task:command%3Amcp%3Aabc (Dashboard: motion) finished', wait: false } as never)
   await $.agent.spawn({ prompt: 'Add routing and task lists to the dashboard mod data', description: 'Mod routing data', subagentType: 'general-purpose' } as never)
-  await $.tool.call({ tool: 'mcp__t3-code__delegate_task', title: 'Page work', task: 'Show the new routing data on the page' } as never)
-  await $.tool.call({ tool: 'SendMessage', to: 'mod-helper', message: 'One more thing' } as never)
-  await $.tool.call({ tool: 'mcp__t3-code__t3_thread_send', threadId: THREAD, message: 'Also this' } as never)
-  await $.tool.call({ tool: 'TaskCreate', subject: 'Read hooks', description: 'x', agentId: 'a1' } as never)
-  await $.tool.call({ tool: 'TaskCreate', subject: 'Write code', description: 'x', agentId: 'a1' } as never)
-  await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'completed', agentId: 'a1' } as never)
-  await $.tool.call({ tool: 'TaskUpdate', taskId: '2', status: 'in_progress', agentId: 'a1' } as never)
-  await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'Plan', status: 'completed', activeForm: 'Planning' }, { content: 'Ship', status: 'pending', activeForm: 'Shipping' }] } as never)
+  await callTool($, { tool: 'mcp__t3-code__delegate_task', title: 'Page work', task: 'Show the new routing data on the page' })
+  await callTool($, { tool: 'SendMessage', to: 'mod-helper', message: 'One more thing' })
+  await callTool($, { tool: 'mcp__t3-code__t3_thread_send', threadId: THREAD, message: 'Also this' })
+  await callTool($, { tool: 'TaskCreate', subject: 'Read hooks', description: 'x', agentId: 'a1' })
+  await callTool($, { tool: 'TaskCreate', subject: 'Write code', description: 'x', agentId: 'a1' })
+  await callTool($, { tool: 'TaskUpdate', taskId: '1', status: 'completed', agentId: 'a1' })
+  await callTool($, { tool: 'TaskUpdate', taskId: '2', status: 'in_progress', agentId: 'a1' })
+  await callTool($, { tool: 'TodoWrite', todos: [{ content: 'Plan', status: 'completed', activeForm: 'Planning' }, { content: 'Ship', status: 'pending', activeForm: 'Shipping' }] })
   await $.turn.complete({ answer: 'Done', reason: 'answer' } as never)
 
   await clock.advance(2000)

@@ -8,6 +8,7 @@ import { TopBar } from './components/topbar/TopBar'
 import { Stats } from './components/stats/Stats'
 import { costSplit } from './components/stats/costCard'
 import { Agents } from './components/agents/Agents'
+import { MessageBalls } from './components/messages/MessageBalls'
 import { Requests } from './components/Requests'
 import { McpServers } from './components/McpServers'
 import { ProjectMemory } from './components/ProjectMemory'
@@ -21,10 +22,10 @@ const INTRO_MS = 700
 
 function Body() {
   const deck = useDeck()
-  // While the body fades out because the data went away, it keeps drawing the last good data.
   // First paint of a session: the blocks rise in, 30ms apart. After that the class is gone and nothing replays.
   const [intro, setIntro] = useState(true)
   useEffect(() => { const t = setTimeout(() => setIntro(false), INTRO_MS); return () => clearTimeout(t) }, [])
+  // While the body fades out because the data went away, it keeps drawing the last good data.
   const snap = deck.snap ?? deck.lastSnap
   if (!snap) return null
   const model = buildModel(snap)
@@ -34,6 +35,7 @@ function Body() {
     <div id="body" className={intro ? 'intro' : undefined}>
       <Stats m={model} show={p.stats} />
       <Agents m={model} mainUsd={mainUsd} showAgents={p.agents} showChats={p.chats} />
+      <MessageBalls m={model} on={p.msgAnim} />
       <Requests m={model} show={p.tasks} />
       <McpServers m={model} show={p.mcp} />
       <ProjectMemory m={model} show={p.memory} />

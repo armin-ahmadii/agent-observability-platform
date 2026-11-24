@@ -117,6 +117,8 @@ function sessionRow(data, st, day) {
 // Session files written within `maxAge`, newest-started first. Each row carries its share of this week's limit,
 // and a T3 helper's session is marked with the session that delegated it (parentId).
 const listCache = new Map() // maxAge -> { at, list }
+// Drops the cached listings now (a session file just changed), so the next request reads them fresh.
+export const forgetSessionLists = () => { listCache.clear(); weekList = null }
 export function listSessions(maxAge = DAY) {
   const hit = listCache.get(maxAge)
   if (hit && Date.now() - hit.at < LIST_CACHE_MS) return hit.list

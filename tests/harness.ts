@@ -21,6 +21,10 @@ type Options = {
   env?: Record<string, string>
   /** Called before each process.run command, e.g. to stage another writer racing it. */
   beforeRun?: (argv: string[]) => void
+  /** The transcript path $.session.info() reports (default: none). */
+  transcript?: string
+  /** Answer $.state.get/set from a store the test can empty, as a compaction does (see `compact`). */
+  ownState?: boolean
   /** Called with each tool.register input. */
   onToolRegister?: (spec: { name: string; description: string; isDeferred?: boolean }) => void
 }
@@ -45,6 +49,30 @@ export function setup(on: On, opts: Options = {}) {
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
   on('model.complete', (opts.modelComplete ?? (() => ({ value: { isAnswered: false, text: '' } as never }))) as never)
+
+  on('session.info', () => ({ value: { transcriptPath: opts.transcript ?? '' } as never }))
+  // Plugin state the test owns, so it can empty it the way a compaction does.
+  const state = new Map<string, { value: unknown; version: number }>()
+  if (opts.ownState) {
+    const keyOf = (e: unknown) => {
+      const a = e as { plugin: string; key: string; id?: string }
+      return `${a.plugin}/${a.key}/${a.id ?? ''}`
+    }
+    on('state.get', (_, e) => {
+      const s = state.get(keyOf(e))
+      return { value: { value: s?.value, version: s?.version ?? 0 } } as never
+    })
+    on('state.set', (_, e) => {
+      const w = e as { value: unknown; ifVersion?: number }
+      const k = keyOf(e)
+      const version = state.get(k)?.version ?? 0
+      if (w.ifVersion !== undefined && w.ifVersion !== version) return { value: { isSet: false, version } } as never
+      state.set(k, { value: w.value, version: version + 1 })
+      return { value: { isSet: true, version: version + 1 } } as never
+    })
+  }
+  /** Empty the plugin state, as Claude Code does on a compaction (needs `ownState`). */
+  const compact = () => state.clear()
 
   mock.env(on, opts.env ?? {})
   const files: Record<string, string> = {}
@@ -77,7 +105,17 @@ export function setup(on: On, opts: Options = {}) {
     const { argv, init } = e as { argv: string[]; init?: { stdin?: string } }
     ran.push([...argv])
     opts.beforeRun?.(argv)
-    const done = (exitCode: number) => ({ value: { exitCode, stdout: '', stderr: '' } as never })
+    const done = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '' } as never })
+    if (argv[0] === 'sh' && /^grep -F /.test(argv[2] ?? '')) {
+      // restore.ts's transcript pipeline: grep -F -e '<p>'… "$1" | grep -F -v '<x>' | tail -c N
+      const cmd = argv[2]!
+      const patterns = [...cmd.matchAll(/-e '([^']*)'/g)].map(m => m[1]!)
+      const exclude = /-v '([^']*)'/.exec(cmd)?.[1]
+      const text = files[argv[4]!]
+      if (text === undefined) return done(2)
+      const hits = text.split('\n').filter(l => l && patterns.some(p => l.includes(p)) && !(exclude && l.includes(exclude)))
+      return done(hits.length ? 0 : 1, hits.map(l => l + '\n').join(''))
+    }
     if (argv[0] === 'mv') {
       const [, from, to] = argv as [string, string, string]
       if (!(from in files)) return done(1)
@@ -103,8 +141,15 @@ export function setup(on: On, opts: Options = {}) {
   /** The published snapshot of session s1. */
   const snapshot = <T = { runs: { id: string; type: string; now: string }[] }>() => JSON.parse(files[fileEnding('/sessions/s1.json')!]!) as T
 
-  return { files, clock, fileEnding, snapshot, ran, reads, writes }
+  return { files, clock, fileEnding, snapshot, ran, reads, writes, compact }
 }
 
 /** A Haiku reply with a little usage. */
 export const answer = (text: string) => ({ value: { isAnswered: true, text, usage: { input_tokens: 10, output_tokens: 5 } } as never })
+
+/**
+ * $.tool.call, typed loosely. Its full typing, spelled out many times across the
+ * test files, trips TypeScript's instantiation-depth limit (TS2589).
+ */
+export const callTool = ($: unknown, input: Record<string, unknown>) =>
+  ($ as { tool: { call: (i: unknown) => Promise<{ text?: string }> } }).tool.call(input)

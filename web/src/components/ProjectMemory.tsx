@@ -15,8 +15,8 @@ import { Appear, Fold, Rows } from './motion'
 const kindName: Record<string, string> = { main: 'Main chat', subagent: 'Subagent', delegated: 'T3 helper' }
 const signed = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n)
 const dirOf = (n: number) => n > 0 ? 'up' : n < 0 ? 'down' : 'even'
-// Agents and rules shown before "+N more".
-const MEM_TOP = 3
+// Agents and rules (and Previous orchestrators) shown before "+N more".
+export const MEM_TOP = 3
 
 function NameCell({ a }: { a: MemAgent }) {
   const t = shortOf(a)

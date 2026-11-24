@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { deck } from './data/store'
-import { darkQuery } from './lib/theme'
+import { darkQuery, applyTheme } from './lib/theme'
 // Plain global CSS. The order matters for the cascade; responsive.css goes last so it wins.
 // Geist and Geist Mono (OFL), bundled into the page so it needs no network.
 import '@fontsource-variable/geist'
@@ -22,5 +22,6 @@ import './styles/settings.css'
 import './styles/responsive.css'
 
 createRoot(document.getElementById('root')!).render(<App />)
-darkQuery.addEventListener('change', deck.render)
+applyTheme()
+darkQuery.addEventListener('change', () => { applyTheme(); deck.render() })
 deck.start()

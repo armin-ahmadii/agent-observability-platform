@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Agents</title>
+<script>/* Theme before first paint; same rule as src/lib/theme.ts applyTheme(). */
+var t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+try { var s = localStorage.getItem('deck-theme'); if (s === 'light' || s === 'dark') t = s } catch (e) {}
+document.documentElement.dataset.theme = t</script>
 </head>
 <body>
 <div id="root"></div>
