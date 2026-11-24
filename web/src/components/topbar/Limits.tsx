@@ -1,9 +1,9 @@
-// Plan limits: the 5-hour limit as a bar in the session menu; at the top right, a ring for Claude's weekly limit and
-// (when Codex has reported one) a ring for the ChatGPT plan's. Hovering or focusing the rings opens the usage card.
+// Plan limits: the 5-hour limit as a bar in the session menu; at the top right, one ring for the subscription chosen in
+// the usage card (Claude's weekly limit by default, or the ChatGPT plan's). Hover, click or focus on it opens the card.
 import { useDeck } from '../../data/store'
 import { Icon } from '../../icons/Icon'
 import { whenReset } from '../../lib/format'
-import type { CodexLimits, Limit } from '../../lib/types'
+import type { CodexLimits, Limit, Subscription } from '../../lib/types'
 import { Ring } from '../Ring'
 import { setCard } from '../Tooltip'
 import { usageCardHtml, HOT_PCT } from './usageCard'
@@ -30,21 +30,20 @@ function UsageRing({ percentUsed }: { percentUsed: number }) {
 
 export function UsageRings() {
   const deck = useDeck()
-  const wk = deck.limits.find(l => l.kind === 'seven_day')
+  const claude = deck.limits.find(l => l.kind === 'seven_day')
   const gpt = codexMain(deck.codexLimits)
-  setCard('usage', usageCardHtml(deck.limits, deck.limitsAt, deck.codexLimits))
-  if (!wk && !gpt) return <div className="wk" />
+  // The chosen subscription, else Claude, else whichever has data.
+  const shown: Subscription | null = deck.ring === 'chatgpt' && gpt ? 'chatgpt' : claude ? 'claude' : gpt ? 'chatgpt' : null
+  setCard('usage', usageCardHtml(deck.limits, deck.limitsAt, deck.codexLimits, shown), action => {
+    if (action === 'ring:claude' || action === 'ring:chatgpt') deck.setRing(action.slice(5) as Subscription)
+  })
+  const used = shown === 'chatgpt' ? gpt!.percentUsed : claude?.percentUsed
+  if (used == null) return <div className="wk" />
   return (
     <div className="wk" data-card="usage" data-card-align="end" tabIndex={0} aria-label="Usage limits">
-      {wk && <span className="wk-i">
-        <UsageRing percentUsed={wk.percentUsed} />
-        <span className="t"><b>{left(wk.percentUsed)}%<span className="wk-l"> left</span></b><span className="wk-x"> this week</span></span>
-      </span>}
-      {gpt && <span className="wk-i">
-        <span className="logo light"><Icon name="m_openai" /></span>
-        <UsageRing percentUsed={gpt.percentUsed} />
-        <span className="t"><b>{left(gpt.percentUsed)}%<span className="wk-l"> left</span></b></span>
-      </span>}
+      {shown === 'chatgpt' && <span className="logo light"><Icon name="m_openai" /></span>}
+      <UsageRing percentUsed={used} />
+      <span className="t"><b>{left(used)}% left</b>{shown === 'claude' && <span className="wk-x"> this week</span>}</span>
     </div>
   )
 }

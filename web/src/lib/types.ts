@@ -85,6 +85,7 @@ export type Session = {
   day?: { usd: number; tokens: number; mainUsd: number; mainTokens: number } // this chat's last 24 hours
 }
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
+export type Subscription = 'claude' | 'chatgpt'
 // The ChatGPT plan's limits, read by the server from Codex's logs. `at`: when Codex last reported them.
 export type CodexLimits = { plan: string | null; at: number; limits: { window: string; minutes: number | null; percentUsed: number; resetsAt: string | null }[] }
 export type MathModel = { model: string; requests: number; usd: number; parts: { label: string; tokens: number; rate: number | null; usd: number | null }[] }

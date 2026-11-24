@@ -9,9 +9,8 @@
 .wk:empty { display: none; }
 .wk .t { white-space: nowrap; color: var(--fg2); }
 .wk .t b { font-weight: 500; color: var(--fg); }
-/* One ring per subscription (Claude, then ChatGPT with its logo); together they open the usage card. */
-.wk { gap: 12px; border-radius: 6px; }
-.wk-i { display: flex; align-items: center; gap: 8px; }
+/* The ring opens the usage card. A ring for another subscription than Claude shows its logo. */
+.wk { border-radius: 6px; }
 .wk .logo { width: 16px; height: 16px; margin-right: -2px; }
 .wk .logo svg { width: 11px; height: 11px; }
 .wk:focus-visible { outline: 1px solid var(--line-strong); outline-offset: 4px; }
@@ -19,7 +18,15 @@
 /* The usage card (in the tooltip box): one heading per subscription, one line + thin bar per limit. */
 #tip.card.usage { width: min(300px, calc(100vw - 16px)); }
 #tip.card.usage h4 { display: flex; justify-content: space-between; gap: 12px; }
-#tip.card.usage h4 em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+#tip.card.usage h4 em { margin-left: auto; font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+#tip.card.usage h4 .ck { flex: none; width: 16px; height: 16px; margin: -3px 0 -3px auto; color: var(--tip-fg); }
+#tip.card.usage h4 em + .ck { margin-left: 0; }
+/* Each subscription is a choice: which one the top-bar ring shows. */
+#tip.card.usage .sub { margin: 0 -8px; padding: 2px 8px 1px; border-radius: 6px; cursor: pointer; }
+#tip.card.usage .sub + .sub { margin-top: 4px; }
+#tip.card.usage .sub:hover { background: rgba(255, 255, 255, 0.06); }
+#tip.card.usage .sub:focus-visible { outline: 1px solid var(--tip-fg2); outline-offset: -1px; }
+#tip.card.usage .sub h4 { margin-top: 6px; }
 #tip.card.usage .ln em { font-style: normal; color: var(--tip-fg2); white-space: nowrap; }
 #tip.card.usage .ub { height: 4px; margin: 3px 0 6px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 #tip.card.usage .ub i { display: block; height: 100%; border-radius: 2px; background: var(--tip-fg2); }

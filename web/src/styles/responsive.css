@@ -24,7 +24,6 @@
   .act span { display: none; }
   .act { padding: 0 5px; }
   .wk .wk-x, .menu .ofw { display: none; }
-  .wk { gap: 10px; }
   .menu .num { min-width: 48px; }
   .back span { display: none; }
 }

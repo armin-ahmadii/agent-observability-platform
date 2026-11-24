@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { api } from './api'
 import { readJSON, writeJSON, readSession, writeSession } from './storage'
 import { localId } from '../lib/ids'
-import { WINS, type Chat, type CodexLimits, type CostMath, type DoneEntry, type Grade, type Limit, type McpRow, type Memory, type Run, type Session, type Snap, type Win } from '../lib/types'
+import { WINS, type Chat, type CodexLimits, type Subscription, type CostMath, type DoneEntry, type Grade, type Limit, type McpRow, type Memory, type Run, type Session, type Snap, type Win } from '../lib/types'
 
 export type Prefs = { stats: boolean; agents: boolean; tasks: boolean; chats: boolean; mcp: boolean; memory: boolean }
 export const PREF_LABELS: [keyof Prefs, string][] = [
@@ -15,7 +15,7 @@ const defaultPrefs: Prefs = { stats: true, agents: true, tasks: true, chats: tru
 // Browser storage keys. Session storage is per tab; prefs are remembered everywhere.
 const KEY = {
   open: 'deck-open', detail: 'deck-detail', hist: 'deck-hist', asks: 'deck-asks', win: 'deck-win',
-  memOpen: 'deck-mem-open', memMore: 'deck-mem-more', prefs: 'deck-show',
+  memOpen: 'deck-mem-open', memMore: 'deck-mem-more', prefs: 'deck-show', ring: 'deck-ring',
 }
 
 const POLL_MS = 1500
@@ -65,6 +65,7 @@ class Deck {
   menuOpen = false
   settingsOpen = false
   prefs: Prefs = { ...defaultPrefs, ...readJSON<Partial<Prefs>>('local', KEY.prefs, {}) }
+  ring: Subscription = readJSON<Subscription>('local', KEY.ring, 'claude') // which subscription the top-bar ring shows
   titlesAsked = new Set<string>()
   gradesAsked = new Set<string>()
   doneAsked = new Set<string>()
@@ -294,6 +295,7 @@ class Deck {
   private memSave() { writeJSON('session', KEY.memOpen, [...this.memOpen]); writeJSON('session', KEY.memMore, this.memMore) }
   toggleMem(id: string) { this.memOpen.has(id) ? this.memOpen.delete(id) : this.memOpen.add(id); this.memSave(); this.render() }
   toggleMemMore(which: string) { this.memMore[which] = !this.memMore[which]; this.memSave(); this.render() }
+  setRing(s: Subscription) { if (s !== this.ring) { this.ring = s; writeJSON('local', KEY.ring, s); this.render() } }
   setPref(k: keyof Prefs, on: boolean) { this.prefs = { ...this.prefs, [k]: on }; writeJSON('local', KEY.prefs, this.prefs); this.render() }
   // Thumbs up/down: one vote each; the same thumb again removes it. Memory reloads right after.
   vote(d: { vsid: string; id: string; label: string; model?: string; kind: string; score: number }) {
